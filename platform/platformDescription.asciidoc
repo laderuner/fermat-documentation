@@ -88,10 +88,10 @@ Fermat-PIP:: **P**lug-**i**ns **P**latform. Basic components that bring essentia
 Fermat-P2P:: Brings the network infrastructure
 Fermat-DMP:: **D**igital **M**oney **P**latform. This modules implement the tools for the <<PlatformDescription-SubApps,subapplications>>
 
-Each of this subsystem is divided in layers. Inside the layers we can find plug-ins, each plug-in has a specific task to do. As a convention we call the plug-ins inside Fermat-PIP Addons instead of Plug-ins. +
+Each of this subsystem is divided in layers. Inside the layers we can find plug-ins, each plug-in has a specific responsability. As a convention we call the plug-ins inside Fermat-PIP Addons instead of Plug-ins. +
 Plug-ins need to identify themself in order to ask for resources to addons. This is a security and organizational decision that helps the system organization as a whole.
 
-We can also identify outside this subsystems two main structures. One is whar we call fermat-pip and the other is fermat-core.
+We can also identify outside these subsystems two main structures. One is what we call fermat-api and the other is fermat-core.
 
 === fermat-api
 
