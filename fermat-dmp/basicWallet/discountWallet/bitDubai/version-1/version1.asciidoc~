@@ -13,9 +13,9 @@ crypto currency representation.
 == Main Problems the Plug-in deals with
 
 The implementation of this kind of abstraction carry many technical
-problems which we will discuss in this section. +
-We will explain the factors involved and in the next sections we will
-present the way the plug-in deals with this considerations. For
+problems we will discuss in this section. +
+We will explain the factors involved and in the next section we will
+present the way the Plug-in deals with this considerations. For
 simplicity from now on we will assume that our local currency are USD
 (US Dollars) and the crypto currency involved is BTC (Bitcoins).
 
@@ -76,14 +76,14 @@ sum of fiat money the user has deposited minus the sum of what he has
 spent (always in fiat currency units). +
 The *available amount* will represent what the user can safely spend and
 its calculation is the core of this plug-ins business logic. +
-Lets make some more precise definitions in order to define this
+Lets make some more precise definitions in order to define the this
 amount.
 +
 As we explained before, we have records saved with the information about
 every deposit made. The value chunks have the information about the
-crypto currency amounts we have deposited, the amount of fiat
-currency we used to get that crypto and a state field. +
-Then, we can represent a value chunk with a tuple (_fa_,_ca_,_s_) where _fa_ is the
+crypto currency amounts we have deposited and the amount of fiat
+currency we used to get that crypto plus an state field. Then, we can
+represent a value chunk with a tuple (_fa_,_ca_,_s_) where _fa_ is the
 fiat currency amount registered in the record, _ca_ is the crypto
 currency amount registered in the record and _s_ is the current state of
 the record. We are ignoring other data in the representation for the
@@ -92,15 +92,13 @@ purpose of the explanation.
 Now, let (fa_1 , ca_1 , s_1), ... ,(fa_n , ca_n , s_n) be all the value
 chunks and let currentFiatAmount be a function that tells us the
 equivalent fiat amount of money represented by the crypto amount we give
-it as parameter. +
-If the current rate is 1BTC per 100USD then
+it as parameter. If the current rate is 1BTC per 100USD then
 currentFiatAount(1) is equal to 100. You can see that at the moment of
 the creation of a value chunk (_fa_,_ca_) it holds that
 currentFiatAmount(_ca_) = _fa_.
 +
 So, with this definitions made we can define with precision the balance
-and available amount as follow: +
-
+and available amount as follow:
 ** balance is the sum of all the fa_i that correspond to the value
 chunks with state UNSPENT.
 ** available amount will be the *minimum between* balance and the sum of
@@ -109,25 +107,23 @@ rate below the current one, i.e. the values chunks where it holds that
 currentFiatAmount(ca_i) >= fa_1 and also s = UNSPENT. +
 *The user will never see an available amount superior to the balance he
 has* (this is a convention we took in this wallet, this could change in
-other kind of wallets).
+other kind of discount wallets).
 +
-Let's see this with some examples: +
-
-*** *Example 1:* +
-Suppose you deposited 100USD in your Discount Wallet and that the
+Let's see this with some examples:
+** *Example 1:* +
+ Suppose you deposited 100USD in your Discount Wallet and that the
 exchange rate at that moment was 1BTC per 100USD. In this situation you
 will see that balance = available amount = 100USD and as a user you
 won't see you have really 1BTC. +
-There will be one record in the Credits table and a value chunk
-(100USD,1BTC,UNSPENT) in the ValueChunk table. +
-Now imagine that the
+ There will be one record in the Credits table and a value chunk
+(100USD,1BTC,UNSPENT) in the ValueChunk table. Now imagine that the
 exchange rate change to 1BTC per 50USD. Under this new situation you
 will see balance = 100USD and an available amount of 0USD, because there
 is only one ValueChunk and 50 = currentFiatAmount(1) < 100. +
  Finally imagine that the new exchange rate is 1BTC per 200USD, Under
 this situation you will see again that balance = available amount =
 100USD.
-*** *Example 2:* +
+** *Example 2:* +
  Suppose you make two separate credits of 100USD at a rate of 1BTC per
 200USD. +
  We will see balance = available amount = 200USD. Also two records in
@@ -140,42 +136,50 @@ available amount would be just 100USD. +
  Finally imagine that the rate raise up to 1BTC per 100USD. The only
 chunk with currentFiatAmount(ca) >= fa is the last chunk we added. So
 the balance is still 300 and the available amount would be
-currentFiatAmount(2) which in this case is 200USD. +
-
-* *Extractions* +
+currentFiatAmount(2) which in this case is 200USD.
+* *Extractions*
++
 So, our last issue deals with the way we will manage the information we
 have in respect to the debits of this wallet (we will use debit as a
 synonym of extraction). +
-If the user wants to spend a fiat amount of money, say N, we check two conditions. First we check if N >= 0 and then if available amount >= N. +
+ If the user wants to spend a fiat amount of money, say N, we first
+check two conditions.
+1.  N >= 0
+2.  available amount >= N
++
 If this conditions hold we add a record to a Debits table similar to the
 one described for Credits table. +
-Now, as we have saved crypto currency as value and the user wants to
-spend fiat currency the big questions are: +
-[start=1]
-.  how much do we subtract to the available amount and to the balance? +
-Remember that the exchange rate of the currencies changes with time and
-some chunks where created at a lower rate than the actual. + 
-This means that we bought the crypto currency at a value and now this crypto amount
+ Now, as we have saved crypto currency as value and the user wants to
+spend fiat currency the big questions are:
+1.  how much do we subtract to the available amount and to the
+balance? +
+ Remember that the exchange rate of the currencies change with time and
+some chunks where created at a lower rate than the actual. This means
+that we bought the crypto currency at a value and now this crypto amount
 represent more fiat money that what we paid initially. +
-For example, if you deposited 100USD at a rate of 1BTC per 100USD and
+ For example, if you deposited 100USD at a rate of 1BTC per 100USD and
 the exchange raise to 1BTC per 200USD you will see a balance and
 available amount of 100USD, but the value inside the wallet is 1BTC
 which is at the moment equivalent to 200USD. +
-Under the logic of this wallet if you try to spend 100USD you will be
+ Under the logic of this wallet if you try to spend 100USD you will be
 notified at the moment of paying that you have a discount of 50USD in
-this case. +
-This discount is possible because you can pay the purchase using 0.5BTC (equivalent to 100USD now but obtained at a price of 50USD). Then, the discount will be
+this case. Because you can pay the purchase using 0.5BTC (equivalent to
+100USD now but obtained at a price of 50USD, so the discount will be
 getCurrentFiatAmout(0.5) - oldFiatValue(0.5), where oldFiatValue tells
 you the equivalent amount of fiat currency that its parameter represent
 using the exchange rate of the value chunk (this may be a different rate
-than the actual rate as happens in this example).
-We would keep a value of 0.5BTC which still represent the remaining original 50USD. The user don't need to know this internal mechanism but can benefit from it. +
-*NOTE:* One good question is, why the user does not get a discount of
-100USD instead of 50USD? This will be answered in the next paragraphs. +
+than the actual rate as happens in this example) and keep a value of
+0.5BTC which still represent the remaining original 50USD. The user
+don't need to know this internal mechanism but can benefit from it.
+
+NOTE: One good question is, why the user does not get a discount of
+100USD instead of 50USD? This will be answered in the next paragraphs.
+
+[start=2]
 .  The second question is how do we manage the value chunks to keep the
 integrity of the ValueChunks, Debits and Credits tables and be able to
 apply this strategy of discounts? +
-In the example explained before the value chunk stored of (100USD,
+ In the example explained before the value chunk stored of (100USD,
 1BTC, UNSPENT) must be changed. We will do this by changing it state to
 FATHER and therefore keep in the ValueChunks table the record (100USD,
 1BTC, FATHER) representing that it was partially spent and we will also
@@ -196,15 +200,14 @@ paid the 100USD needed and then deposited back the remaining 100USD at
 the actual exchange rate.
 +
 The difference of this two strategies is:
-
-*** In the second strategy, you will have an apparent higher discount
+** In the second strategy, you will have an apparent higher discount
 (because you will have 100USD to add to the balance instead of just
 50USD coming from the UNSPENT child chunk), you will also see an
 available amount of 100USD instead of 50USD. +
 The disadvantage is that if the exchange rate goes down, say to 1BTC per
 150USD, the value chunk will not be available until the rate go back to
 1BTC per 200USD or higher.
-*** In the first approach (the one we followed in this implementation)
+** In the first approach (the one we followed in this implementation)
 the value chunk will be available for the case of the rate going down to
 1BTC per 150USD. So you still can have a discount in the future with the
 chunk. The main advantage is that at this rate you will have this chunk
@@ -215,27 +218,27 @@ lower balance of the wallet will restrict the available amount to spend.
 Our conclusion is that real day to day use should provide the
 information to decide which approach is the best. For now, we will take
 the one described first.
-
-So, let's try to formalize the algorithm to implement this logic. We need
++
+So, lets try to formalize the algorithm to implement this logic. We need
 to calculate the discount and to modify the ValueChunks table to reflect
 the debit in the way explained answering the question 2.
-
++
 Lets begin as usual with some definitions used in the algorithm:
 
-* amount to spend: N +
-* actual value chunk being analysed: vc, we will use the notation that
+** amount to spend: N +
+** actual value chunk being analysed: vc, we will use the notation that
 vc is the tuple (fa,ca,state) where:
-** fa is the fiat amount of the value chunk +
-** ca is the crypto amount of the value chunk +
-** state is the state of the value chunk +
-* The discount acumulated: discount (initialy set to 0)
-* getCurrentFiatAmount: a function that given a crypto amount of
+*** fa is the fiat amount of the value chunk +
+*** ca is the crypto amount of the value chunk +
+*** state is the state of the value chunk +
+** The discount acumulated: discount (initialy set to 0)
+** getCurrentFiatAmount: a function that given a crypto amount of
 currency it returns the equivalent fiat amount at *the current* exchange
 rate.
-* getCurrentCryptoAmount: a function that given a fiat amount of
+** getCurrentCryptoAmount: a function that given a fiat amount of
 currency it returns the equivalent crypto amount at *the current*
 exchange rate.
-* oldFiatValue: a funtion that given a crypto amount of currency, it
+** oldFiatValue: a funtion that given a crypto amount of currency, it
 returns the equivalent fiat amount calculated at the *original father
 chunk exchange rate*
 +
@@ -313,7 +316,7 @@ improvement to the implementation of this algorithm. The rule of thumb
 to follow in this module is: No matter what is the problem, *always keep
 a consistent relation between the balance, available amount and internal
 information stored in the wallet*. +
-For more information about the conversions functions see their
+ For more information about the conversions functions see their
 documentation in the Definitions Layer
 
 == Implementation Notes
