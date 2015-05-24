@@ -1,5 +1,5 @@
 [[BasicWallet-DiscountWallet-BitDubai-V1]]
-= Version 1
+= Discount Wallet - Version 1
 
 == Plug-in Description
 
@@ -20,6 +20,7 @@ simplicity from now on we will assume that our local currency are USD
 (US Dollars) and the crypto currency involved is BTC (Bitcoins).
 
 * *Exchange rate fluctuation* +
+
 When dealing with different currencies we have an exchange rate involved
 that varies from day to day. This characteristic is no stranger to
 crypto currencies. +
@@ -34,10 +35,14 @@ has).
 ** 1 BTC per 200 USD. This would mean that the value inside the wallet
 is now 200 USD (and not the 100 USD the user deposited and still assumes
 he has).
+
 * *Deposits with different exchange rates* +
+
 How should we act if the user deposits money in the discount wallet in
 several moments at different exchange rates?
+
 * *Extractions* +
+
 Imagine the user deposited 100USD at a rate of 1BTC per 100USD and then
 deposited another 100USD but now with a rate of 1BTC per 50USD. If the
 user then wants to extract 200USD from his discount wallet, how should
@@ -49,6 +54,7 @@ Let's answer to the questions pointed before. For convenience we will
 answer the second one first.
 
 * *Deposits with different exchange rates* +
+
 We will manage this by saving the information of the exchange rate
 associated to every deposit made with two tables. The first table will
 deal with the registration of the credits (we will use the word credit
@@ -67,7 +73,9 @@ So, initially every credit record in the Credits table will have a value
 chunk assign in the ValueChunk table.
 +
 Now lets see how we use this information to treat the other issues.
+
 * *Exchange rate fluctuation* +
+
 The idea is to show the user two amounts of money, one called *balance
 of the wallet* and the other called *available amount* both measured in
 fiat currency units. +
@@ -114,6 +122,7 @@ other kind of wallets).
 Let's see this with some examples: +
 
 *** *Example 1:* +
+
 Suppose you deposited 100USD in your Discount Wallet and that the
 exchange rate at that moment was 1BTC per 100USD. In this situation you
 will see that balance = available amount = 100USD and as a user you
@@ -127,7 +136,9 @@ is only one ValueChunk and 50 = currentFiatAmount(1) < 100. +
  Finally imagine that the new exchange rate is 1BTC per 200USD, Under
 this situation you will see again that balance = available amount =
 100USD.
+
 *** *Example 2:* +
+
  Suppose you make two separate credits of 100USD at a rate of 1BTC per
 200USD. +
  We will see balance = available amount = 200USD. Also two records in
@@ -143,6 +154,7 @@ the balance is still 300 and the available amount would be
 currentFiatAmount(2) which in this case is 200USD. +
 
 * *Extractions* +
+
 So, our last issue deals with the way we will manage the information we
 have in respect to the debits of this wallet (we will use debit as a
 synonym of extraction). +
