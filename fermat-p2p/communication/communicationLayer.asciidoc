@@ -1,0 +1,13 @@
+= Communication Layer
+
+== Layer Description
+
+...
+
+== Plug-ins in this layer
+
+:leveloffset: 2
+include::cloudClient/developersIndex.asciidoc[]
+
+:leveloffset: 2
+include::cloudServer/developersIndex.asciidoc[]
