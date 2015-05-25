@@ -2,3 +2,6 @@
 
 :leveloffset: 1
 include::basicWallet/basicWalletLayer.asciidoc[]
+
+:leveloffset: 1
+include::cryptoTransaction/cryptoTransactionLayer.asciidoc[]
