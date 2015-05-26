@@ -2,7 +2,24 @@
 
 == Layer Description
 
-...
+The information about transaction is divided in two concepts: *Information* and *value*. +
+The value at this moment is stored in the crpto currencies assign to the user addresses manage by the wallets
+in the device. On the other hand the information tell us among other things in which wallet is allocated value
+and what amount is allocated in each wallet. +
+
+The information and the value travel in different chanels, so they will be acknowledge by a device with delays. +
+The responsability of this layer is to keep the sincronization of this concepts. The plug-ins that live here will
+detect the arrival of value and information and will update the balances of the system volt and wallets balances in
+a transactional fashion. +
+No loss of value or information can be permited, so the mechanisms implemented by this layer will need to 
+contemplate many kind of failures (device shut down, network failure, etc.)-
+
+NOTE: The plug-ins in this layer will need to communicate with the wallets and crypto volt using events 
+or at least a more complex mechanism that simple method call. The plug-ins need to know that the information inside
+the wallets and volt was actually updated and persisted before ending the sincronization protocol.
+
+in the next section we will explore a general idea behind the protocols and failures considered in the design of 
+this layer.
 
 == Plug-ins in this layer
 
