@@ -5,7 +5,7 @@ It also provides some standard implementations of common pieces of code like asy
 
 Some folders and their description:
 
-crypto/asymmetric:: Package that provide asymmetric encryption methods using eliptic cryptography curve.
+crypto/asymmetric:: Package that provide asymmetric encryption methods using eliptic curve cryptography.
 crypto/util:: related classes for the asymmetric package implementation.
 developer:: (*draft of a*) Class related to manage the information of a developer, like email, name and other information.
 event:: We can also find the definition of the EventMonitor, PlatformEvent and DeasWithEventMonitor interfaces. 
