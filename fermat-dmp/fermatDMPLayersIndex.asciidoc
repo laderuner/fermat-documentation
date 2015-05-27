@@ -1,6 +1,9 @@
 = Fermat-DMP System Layers
 
 :leveloffset: 1
+include::networkService/networkServiceLayer.asciidoc[]
+
+:leveloffset: 1
 include::basicWallet/basicWalletLayer.asciidoc[]
 
 :leveloffset: 1
