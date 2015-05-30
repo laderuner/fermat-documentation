@@ -1,9 +1,9 @@
-[[Fermat-DMP-Network-Service-Layer]]
+[[Fermat-DMP-NetworkServiceLayer]]
 = Network Service Layer
 
 == Layer Description
 
-The plug-ins in this layer are the ones that let the functionality of the platform transcend a single device to let different users interact with each other over the platform. This layer is the main consumer of the <<Fermat-P2P-Communication-Layer,communication layer>> services. +
+The plug-ins in this layer are the ones that let the functionality of the platform transcend a single device to let different users interact with each other over the platform. This layer is the main consumer of the <<Fermat-P2P-CommunicationLayer,communication layer>> services. +
 
 The modules in the world layer also implement interaction with entities that live outside the device, but in that layer the components we interact with live outside the platform. +
 

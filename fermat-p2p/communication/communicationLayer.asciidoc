@@ -1,4 +1,4 @@
-[[Fermat-P2P-Communication-Layer]]
+[[Fermat-P2P-CommunicationLayer]]
 = Communication Layer
 
 == Layer Description
@@ -16,7 +16,7 @@ Even more, a purpose of this layer is to abstract completely the plug-ins managi
 
 In this first implementation will rely in a cloud server. At initialization the devices will contact through the cloud client plug-in with the server to inform they are online and can be contacted by other users. +
 
-There is an identification system that identify devices, actors and <<Fermat-DMP-Network-Service-Layer,network services>> that consist in pairs of keys generating by asymmetric cryptography methods. +
+There is an identification system that identify devices, actors and <<Fermat-DMP-NetworkServiceLayer,network services>> that consist in pairs of keys generating by asymmetric cryptography methods. +
 
 === P2P
 

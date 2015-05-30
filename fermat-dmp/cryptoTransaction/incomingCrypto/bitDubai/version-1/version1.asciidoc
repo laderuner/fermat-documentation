@@ -1,3 +1,91 @@
-= Version 1
+[[FermatDMP-CryptoTransactionLayer-IncomingCrypto-Bitdubai-1]]
+= Incoming Crypto - Version 1
 
 == Plug-in Description
+
+This is one of the central plug-ins in this layer. It is the one that receives from the other components the notifications about the reception of new value and information that arrive. +
+Network services will give us the information of the incoming transactions and currently the crypto network layer will tell us about the crypto amount (value) that arrive.
+
+As mentioned in the <<Fermat-DMP-CryptoTransactionLayer-LayerDescription,layer description>>, we can't assume any order in the arrival of the information, so we will need to design a mechanism of syncronization to coordinate the system actions. +
+When we get both the value and the information related to a transaction we will procede to handle the responsability of refreshing the state of the system to other plug-ins in this layer.
+
+Let's see an example to examine the problem we are dealing with.
+
+Suppose Alice wants to pay Bob 100 dollars using a fiat over currency wallet. In this system we will transfer the value of the 100 dollars in a crypto currency, say bitcoin. +
+Then, Alice wallet will create a transaction that involve two concepts. One is a bitcoin transaction of an equivalent to the 100 dollars she wants to send. The wallet also needs to inform Bob's wallet that those bitcoins sent represent the 100 dollars sent by Alice. +
+This second piece of information do not travel through the crypto network, instead it  travels through the platform using network services. +
+After Alice sends her transaction, Bob will receive it also devided in the mentioned two channels. This plug-in will be notified by a network service that 100 dollars have been sent from Alice wallet and separetely the bitcoin crypto network will inform this plug-in that a certain amount of bitcoins have arrived to a wallet in his device. +
+
+As we can see, there are many problems involved in this operations:
+
+. We need a mechanism to relate a crypto transaction with the information provided by a network service.
+. We need to be able to receive the transaction information in any order (first the crypto network valu and then the network service information or vice versa)
+. We need to be prepared to handle long delays and even losses in the information,i.e. we have to be prepare if we receive a crypto amount and not the related information or if we receive the information of a transaction but not the crypto amount.
+
+This plug-in will work with agents (multi thread work) for performance reasons, so we will need to plan carefully the interaction and syncronization mechanisms between threads to avoid concurrency problems.
+
+
+
+== NOTAS (TO BE TRANSLATED, EDITED AND DELETED)
+
+Cuando llega el dinero en este sistema distribuido, los dispositivos pueden estar prendidos o no. Además no sabemos si primero llega la información de la transacción o el valor de la misma.
+Cuando llega primero el valor, no queda claro de quién proviene ni qué tipo de usuario lo envió (device,intra,extra user). Por eso este módulo existe, escucha eventos de crypto que llega y su misión es tomar pocesión de la transacción y luego pasársela a uno de los módulos más especializados (incoming-crypto-device, incoming-crypto-i BTC, incoming-crypto-extra).
+
+Crypto network, billeteras externas
+
+El mósulo recibe el evento, averigua su fuente y comienza una especie de protocolo para hacerse cargo de la transacción y luego avisarle a quien le envió el evento que ya tomó la posta y ahora se encarga él.
+
+Si llega 1 BTC a la crypto network, cuando llega ese bitcoin el módulo de la crypto network asume que es responsable de ese valor. Entonces emite un evento que avisa que llegó ese dinero hasta que alguien tome el control de la transacción.
+
+El incoming crypto escucha el evento, toma el control de la transacción, avisa a la crypto network que ya la tiene y la crypto network deja de enviar el evento por dicha transacción.
+
+Todas las confirmaciones se hacen cuando las cosas se grabaron persistentemente, no cuando las toman en memoria.
+
+Cosas similares se hacen para averiguar de qué tipo de usuario viene la transacción para pasarle la pocesión a ese módulo.
+
+Los transaction managers los deben implementar también los módulos que lanzan estos eventos que informan transacciones. 
+
+Cuando el módulo especializado en el tipo de usuario escucha el evento del incoming crypto y toma responsabilidad de la transacción. Luego aplica las acciones que sean necesarios para actualizar el estado de las billeteras y otros módulos para que reflejen la llegada de la transacción. +
+Deben reflejarse los aspectos de información y valor. La información está en las wallets en general y el valor en la crypto volt (bóbeda)
+
+.Eventos
+* Identify: se ve una transacción en la red pero sin confirmaciones
+* Received: la transacción obtiene la primer confirmación 
+* ReceptionConfirmed: la transacción es totalmente confirmada (en bitcoin son 6 confirmaciones)
+* Reversed: La transacción fue revertida
+
+.IncommingCryptoRegister Table Fields
+* Id: identificadr
+* AddressTo: Dirección de destino de la transacción
+* CryptoCurrency: Enum de la crypto
+* CryptoAmount: Cantidad de crypto
+* Source: Dirección de origen de la transacción
+* Destination: Debe ser origen en realidad, intra/device/extra user para saber a quién avisar sobre la transacción
+* CryptoStatus: Estado de la transacción en la red crypto
+** IDENTiFY: Se ve la transacción en la red sin confirmaciones (no actuar)
+** RECEIVED: Ve la transacción con una confirmación (hacer las actualizaciones)
+** CONFIRMED: Ve la sexta confirmación
+** REVERSED: Se revierte la transacción, es raro pero puede pasar (considerar como revertir las cosas)
+* Status: Ciclo de vida del protocolo
+** COLOCAR LOS ENUMS
+* Timestamp: marca de tiempo
+
+.IncomingCryptoEventsRecorded Table Fields
+* Id
+* Event
+* Source
+* Status
+* Timestamp
+
+
+=== AGENTES
+
+Monitor: Procesa los eventos que registra en recorderService +
+Se despierta periódicamente y mira si hay evento que le interese. +
+Si hay eventos sobre los que deba actuar (¿con next pending event?, un confirmed por ejemplo) el agente procede a tomar la poseción de la transacción.
+
+* La clase root inicializa los agentes y el eventRecorderService.
+* El monitor se despierta, pide al registry el siguiente evento a tratar.
+** Si tiene algo, busca el source del evento, se comunica por la interfaz del source para pedirle el registo de las transacciones y hace lo que corresponda. Al parece lo que corresponde es tomar la información de la transacción y avisarle al source que la capa de transacciones se va a hacer cargo desde ahora.
+** Si no tiene eventos, se duerme de nuevo.
+* El relay, le pide al registry las transacciones de las que la capa es responsable (las que recibe el monitor). Consulta si viene de un intra, extra o device user y manda un evento adecuado para que lo procece el módulo correspondiente (incoming crypto intra, incoming crypto extra, outgoing crypto intra, etc.).

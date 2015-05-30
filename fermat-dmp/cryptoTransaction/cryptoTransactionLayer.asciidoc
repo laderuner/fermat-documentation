@@ -1,25 +1,57 @@
+[[Fermat-DMP-CryptoTransactionLayer]]
 = Crypto Transaction Layer
 
+[[Fermat-DMP-CryptoTransactionLayer-LayerDescription]]
 == Layer Description
 
-The information about transaction is divided in two concepts: *Information* and *value*. +
-The value at this moment is stored in the crpto currencies assign to the user addresses manage by the wallets
-in the device. On the other hand the information tell us among other things in which wallet is allocated value
-and what amount is allocated in each wallet. +
+Transactions are one of the core functionalities developed over Fermat. +
+Fermat uses crypto currencies to transfer the real value from a user to another, but we have to remember that you can make transactions of other assets apart from crypto currencies. +
+For example, we can transfer 100 dollars from one wallet to another. The mechanism to do this involve the value transaction which is manage by transferring an amount of crypto currency like bitcoin equivalent to 100 dollars between the users and an information transaction which provide the information about the meaning of those bitcoins. In this case the information would be that the bitcoins sent by the crypto network are represented as 100 dollars. +
 
-The information and the value travel in different chanels, so they will be acknowledge by a device with delays. +
-The responsability of this layer is to keep the sincronization of this concepts. The plug-ins that live here will
-detect the arrival of value and information and will update the balances of the system volt and wallets balances in
-a transactional fashion. +
-No loss of value or information can be permited, so the mechanisms implemented by this layer will need to 
-contemplate many kind of failures (device shut down, network failure, etc.)-
+Therefore, when we make a transaction in Fermat we can identify two components: *information* and *value*. +
+The value at this moment is stored in the crypto currencies assign to the user addresses manage by the wallets. On the other hand the information tell us, among other things, in which wallet is allocated value, what that value represents and what amount is allocated in each wallet. +
 
-NOTE: The plug-ins in this layer will need to communicate with the wallets and crypto volt using events 
-or at least a more complex mechanism that simple method call. The plug-ins need to know that the information inside
-the wallets and volt was actually updated and persisted before ending the sincronization protocol.
+The information and the value travel in different channels, so they will be be acknowledged by a device with delays. This means that we can receive a notification that 100 dollars have been sent to us before we get any new bitcoins that represent the value and vice versa, we can get new bitcoins before receiving the notification of what those bitcoins represent and why they have arrived. +
 
-in the next section we will explore a general idea behind the protocols and failures considered in the design of 
-this layer.
+The responsibility of this layer is to keep the synchronization of this concepts. The plug-ins that live here will detect the arrival of value and information and will update the balances of the system volt and wallets balances in a transactional fashion, i.e. they will update things only when both information *and* value are acknowledged. +
+No loss of value nor information can be permitted. The mechanisms implemented by this layer will need to contemplate many kind of problems (device shut down, network failure, etc.).
+
+NOTE: The plug-ins in this layer will need to communicate with the wallets and crypto volt using events or at least a more complex mechanism that simple method call. The plug-ins need to know that the information inside the wallets and volt was actually updated and persisted before ending the synchronization protocol.
+
+In the next section we will explore a general idea behind the protocols and failures considered in the design of this layer.
+
+== Transaction Data Structure
+
+To attack the problems we deal with in this layer we will need to design a few data structures to contain and share important information. +
+To simplify the analysis let's give a name to the data strcutures that contains the value and information associated to the fermat transaction. We will call the ValueContainer and MetaValueContainer respectively. +
+
+As we will get the value and meta-value separetely and in no predictable order we will to introduce in the MetaValueContainer a reference to the associated ValueContainer. In this way we will be able to know when we have all the information needed to reflect the transaction in the wallets among other components. +
+
+The ValueContainer will store.
+
+.ValueContainer Information
+. The crypto currency we are dealing with as value.
+. The amount of crypto currency. 
+. A transaction identifier that distinguish the crypto transaction.
+. The source address of the transaction.
+. The destination address of the transaction.
+. The timestamp that stablish the creation time of the transaction.
+
+.MetaValueContainer Information
+. The asset represented by the transaction (fiat currency, bonds, etc)
+. A representation of relevant information associated to the asset, e.g. in fiat currency would be the amount of currency involved.
+. The transaction identifier of the associated ValueContainer.
+. The timestamp that stablish the creation time of the transaction. For a simple secutiry mechanism we will ask for this timestamp to be the same timestamp present in the associated ValueContainer.
+
+This cointainers descriptions are a draft presentation. We will add some fields to them to attack the syncronization problems. +
+
+An important aspect to consider is that lower layers (like network services and crypto networks) will interact with this containers as they are the layers that will give us this information. +
+
+== PREGUNTAS 
+
+* Tiene sentido que se dispare un evento de incoming crypto para manejar cosas de un extra user?
+* Quién me dice de qué tipo de usuario viene una transacción? Más importante aún, cómo influye esta información en las tareas de esta capa?
+
 
 == Plug-ins in this layer
 
