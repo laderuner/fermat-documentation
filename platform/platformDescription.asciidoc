@@ -6,13 +6,11 @@
 In the following sections we will explore:
 
 * The functional description of this system (what is Fermat? how can we use it?). 
-* The <<PlatformDescription-Wallets,wallets>> and <<PlatformDescription-SubApps,applications>> that run over this platform
-* The <<PlatformDescription-SourceCode,code distribution and essentials concepts>> needed to 
+* The <<PlatformDescription-Wallets,wallets>> and <<PlatformDescription-SubApps,applications>> that run over this platform.
+* The <<PlatformDescription-SourceCode,code distribution and essentials concepts>> needed to. 
 
 [[PlatformDescription-Wallets]]
 == Wallets
-
-// Move normal title levels.
 
 :leveloffset: 2
 include::wallets/bitcoinWallet.asciidoc[]
@@ -44,9 +42,16 @@ include::wallets/argentinaBankNotesWallet.asciidoc[]
 [[PlatformDescription-SubApps]]
 == Subapplications
 
-// Move normal title levels.
+It is important to mention that every subapp described here is divided in a user interface and a logic module. The application UI runs over the platform and the logic that control the app lives inside the platform. This means that for each subapplication we will find a plug-in in the <<Fermat-DMP-ModuleLayer,module layer>> that implements the behavior of the app.
+
+:leveloffset: 2
+include::subapps/shell.asciidoc[]
+
 :leveloffset: 2
 include::subapps/walletManager.asciidoc[]
+
+:leveloffset: 2
+include::subapps/walletFactory.asciidoc[]
 
 :leveloffset: 2
 include::subapps/walletPublisher.asciidoc[]
@@ -67,7 +72,10 @@ include::subapps/shopManager.asciidoc[]
 include::subapps/shop.asciidoc[]
 
 :leveloffset: 2
-include::subapps/brandAndRetailer.asciidoc[]
+include::subapps/brand.asciidoc[]
+
+:leveloffset: 2
+include::subapps/retailer.asciidoc[]
 
 :leveloffset: 2
 include::subapps/cryptoBroker.asciidoc[]

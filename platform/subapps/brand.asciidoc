@@ -1,0 +1,3 @@
+= Brand
+
+This subapp let a brand navigate through the wallets it has published and create marketing products like coupons. +
