@@ -81,8 +81,19 @@ include::subapps/retailer.asciidoc[]
 include::subapps/cryptoBroker.asciidoc[]
 
 :leveloffset: 2
-include::subapps/topUp-CashOutPoint.asciidoc[]
+include::subapps/topUpPoint.asciidoc[]
 
+:leveloffset: 2
+include::subapps/cashOutPoint.asciidoc[]
+
+:leveloffset: 2
+include::subapps/designer.asciidoc[]
+
+:leveloffset: 2
+include::subapps/developer.asciidoc[]
+
+:leveloffset: 2
+include::subapps/marketer.asciidoc[]
 
 // Return to normal title levels.
 :leveloffset: 0
