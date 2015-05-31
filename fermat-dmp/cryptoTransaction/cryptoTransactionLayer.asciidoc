@@ -47,11 +47,6 @@ This cointainers descriptions are a draft presentation. We will add some fields 
 
 An important aspect to consider is that lower layers (like network services and crypto networks) will interact with this containers as they are the layers that will give us this information. +
 
-== PREGUNTAS 
-
-* Tiene sentido que se dispare un evento de incoming crypto para manejar cosas de un extra user?
-* Quién me dice de qué tipo de usuario viene una transacción? Más importante aún, cómo influye esta información en las tareas de esta capa?
-
 
 == Plug-ins in this layer
 
