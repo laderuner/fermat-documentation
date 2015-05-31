@@ -6,10 +6,10 @@
 
 Transactions are one of the core functionalities developed over Fermat. +
 Fermat uses crypto currencies to transfer the real value from a user to another, but we have to remember that you can make transactions of other assets apart from crypto currencies. +
-For example, we can transfer 100 dollars from one wallet to another. The mechanism to do this involve the value transaction which is manage by transferring an amount of crypto currency like bitcoin equivalent to 100 dollars between the users and an information transaction which provide the information about the meaning of those bitcoins. In this case the information would be that the bitcoins sent by the crypto network are represented as 100 dollars. +
+For example, we can transfer 100 dollars from one wallet to another. The mechanism to do this involve the value transaction which is managed by transferring an amount of crypto currency like bitcoin equivalent to 100 dollars between the users and an information transaction which provide the information about the meaning of those bitcoins. In this case the information would be that the bitcoins sent by the crypto network are represented as 100 dollars. +
 
 Therefore, when we make a transaction in Fermat we can identify two components: *information* and *value*. +
-The value at this moment is stored in the crypto currencies assign to the user addresses manage by the wallets. On the other hand the information tell us, among other things, in which wallet is allocated value, what that value represents and what amount is allocated in each wallet. +
+The value at this moment is stored in the crypto currencies assign to the user addresses managed by the wallets. On the other hand the information tell us, among other things, in which wallet is allocated value, what that value represents and what amount is allocated in each wallet. +
 
 The information and the value travel in different channels, so they will be be acknowledged by a device with delays. This means that we can receive a notification that 100 dollars have been sent to us before we get any new bitcoins that represent the value and vice versa, we can get new bitcoins before receiving the notification of what those bitcoins represent and why they have arrived. +
 
@@ -23,7 +23,7 @@ In the next section we will explore a general idea behind the protocols and fail
 == Transaction Data Structure
 
 To attack the problems we deal with in this layer we will need to design a few data structures to contain and share important information. +
-To simplify the analysis let's give a name to the data strcutures that contains the value and information associated to the fermat transaction. We will call the ValueContainer and MetaValueContainer respectively. +
+To simplify the analysis let's give a name to the data strcutures that contains the value and information associated to the fermat transaction. We will call them ValueContainer and MetaValueContainer respectively. +
 
 As we will get the value and meta-value separetely and in no predictable order we will to introduce in the MetaValueContainer a reference to the associated ValueContainer. In this way we will be able to know when we have all the information needed to reflect the transaction in the wallets among other components. +
 
