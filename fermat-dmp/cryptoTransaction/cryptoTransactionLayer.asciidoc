@@ -51,12 +51,44 @@ An important aspect to consider is that lower layers (like network services and 
 
 == Transaction Protocol (DRAFT)
 
-.PROTOCOLO DE TRASPASO DE POCESIÓN DE UNA TRANSACCIÓN: (BORRADOR, ver documentación en )
-* Cada módulo que deba tomar posesión de transacciones al iniciarse deberá ir a buscar si quienes les envían avisos para que vaya a buscar transacciones no tienen transacciones acumuladas. Esto se debe a que el módulo pudo despertarse tras haber perdido varias notificaciones de transacciones nuevas.
-* Este módulo consulta un método de la interfaz de quien transfiere la responsabilidad de las transacciones para pedir la lista de todas las transacciones pendientes a transferir.
-* El módulo luego guarda persistentemente (en disco) cada transacción en una base de datos interna. Tras guardar exitosamente una transacción avisa al módulo que se la proveyó que esa transacción ya fue tomada por otro módulo. Notar que las transacciones se envían en listas pero se confirma recepción de a una. +
-Cuando una transacción de la lista se intenta persistir en la base de datos debe considerarse que si surge una excepción que indica que la transacción ya estaba en la base de datos no es un error a notificar. Eso indica que se había tomado pocesión y se apagó el dispositivo antes de notificar a la fuente, por lo ue esta no la marcó como "procesada", así que en vez de mandar un error simplemente se llama al método de la fuente avisando que la transacción ya se procesó
-* Asimismo, quien envía transacciones debe estar preparado para el aviso de que se desea notificar que una transacción se procesó más de una vez. 
+Este protocolo involucra dos tipos de módulos T y R. Los tipo T transfiere la responsabilidad de transacciones que poseen y los tipo R reciben la responsabilidad de las transacciones. +
+
+IMPORTANT: Este protocolo asume que los módulos tipo R saben quienes son sus posible T asociados (quienes les transmiten transacciones).
+
+Pensemos en la interacción de un módulo T que desea enviar una transacción a R. 
+
+NOTE: Cuando digamos que T recibe una transacción, nos referimos a que tiene una nueva transacción que notificar.
+
+.Pasos del protocolo
+. T registra una transacción nueva que debe ceder a otro módulo, entonces la guarda en su base de datos interna con el estado NEW y notifica con un evento para que el módulo responsable busque dicha transacción.
+. R escucha el evento de T, mira que el origen del evento es T y llama a un método de la interfaz de T que retorna una lista con todas las transacciones que tiene guardada en estado NEW. **T no cambia el estado de las transacciones que tiene almacenadas cuando R hace esta consulta.**
+. R toma la lista y almacena en una base de datos interna cada transacción de a una a la vez con el estado NEW. 
+. Luego, para cada transacción en estado NEW, R llama a otro método de T al cual le pasa el ID de la transacción y este marca en su base de datos interna a dicha transacción como OLD. *Luego de esa llamada para confirmar recepción* R marca la transacción en estado NOTIFIED. El motivo por el cual primero se notifica y luego se confirma se hace para garantizar que la transacción fue correctamente confirmada por T antes de marcar que lo fue en la base de datos.
+
+.NOTAS DEL PROTOCOLO
+* Cuando se involucra sólo a dos módulos (uno de tipo R y otro T), este protocolo se implementa con 3 threads en R.
+** El primer thread es quien recibe los eventos de T y los registra en una base de datos interna.
+** El segundo lee los eventos de esta base de datos que llena el thread anterior, va a buscar la lista de transacciones y las guarda una por una en otra base de datos.
+** El tercero mira la base de datos del thread anterior con transacciones nuevas y le informa a T que recibió correctamente la transacción. Entonces pasa la misma al estado NOTIFIED.
+* Más adelante hablaremos del caso de una comunicación que involucra tres módulos, uno de tipo T (emisor original), uno de tipo R (receptor final) y un puente de tipo que actúa como tipo R para el emisor y R para el receptor final (un puente).
+* Al iniciarse un módulo de tipo R, deberá consultar si sus módulos T asociados tienen transacciones acumuladas. Esto se debe a que el módulo pudo inicializarse tras haber perdido varias notificaciones de transacciones nuevas.
+* Claramente puede llegar una nueva transacción a T antes que R procese toda la lista de transacciones que ha recibido en una consulta anterior. En este caso T dispara nuevamente el evento de que tiene nuevas transacciones. +
+El primer thread de R recibirá ese evento, y luego el segundo thread probablemente traerá en la lista de transacciones nueva transacciones que ya ha registrado pero aún el tercer thread no ha confirmado recepción. +
+Esto da lugar a que se intente guardar en la base de datos una transacción ya guardada, dicho caso no deberá considerarse como un error y simplemente deberá ser ignorado. +
+* Por otro lado T debe estar preparado para el aviso de que se desea notificar que una transacción se procesó más de una vez. Esto puede darse en el caso en que el tercer thread de R notificó la recepción pero no llegó a persistir en su base de datos el aviso de NOTIFIED, T ignorará el aviso y si todo es correcto esta vez R sí podrá marcar la transacción como NOTIFIED.
+
+=== Caso de tres módulos
+
+Llamaremos a este caso el Protocolo EPR (Protocolo **E**misor-**P**uente-**D**estinatario). +
+En este caso tenemos tres módulos involucrados en el intercambio de transacciones.
+
+* Un módulo E de tipo T (emisor original).
+* Un módulo D de tipo R (destinatario final)
+* Un módulo P que es tanto de tipo T como R (puente entre E y R)
+
+La utilidad de este protocolo se da cuando un módulo (E) debe delegar una transacción pero no tiene forma de saber a quién debe hacerlo. En este caso se coloca a un receptor temporal (P) que sí puede determinar quién es el receptor indicado para la transacción (D). +
+
+La variación es leve, Los módulos E y D actuarán como explicamos antes en el protocolo (no saben que hay un puente)
 
 == Plug-ins in this layer
 
