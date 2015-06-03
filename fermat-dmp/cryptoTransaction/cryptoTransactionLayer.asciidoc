@@ -49,6 +49,14 @@ This cointainers descriptions are a draft presentation. We will add some fields 
 
 An important aspect to consider is that lower layers (like network services and crypto networks) will interact with this containers as they are the layers that will give us this information. +
 
+== Transaction Protocol (DRAFT)
+
+.PROTOCOLO DE TRASPASO DE POCESIÓN DE UNA TRANSACCIÓN: (BORRADOR, ver documentación en )
+* Cada módulo que deba tomar posesión de transacciones al iniciarse deberá ir a buscar si quienes les envían avisos para que vaya a buscar transacciones no tienen transacciones acumuladas. Esto se debe a que el módulo pudo despertarse tras haber perdido varias notificaciones de transacciones nuevas.
+* Este módulo consulta un método de la interfaz de quien transfiere la responsabilidad de las transacciones para pedir la lista de todas las transacciones pendientes a transferir.
+* El módulo luego guarda persistentemente (en disco) cada transacción en una base de datos interna. Tras guardar exitosamente una transacción avisa al módulo que se la proveyó que esa transacción ya fue tomada por otro módulo. Notar que las transacciones se envían en listas pero se confirma recepción de a una. +
+Cuando una transacción de la lista se intenta persistir en la base de datos debe considerarse que si surge una excepción que indica que la transacción ya estaba en la base de datos no es un error a notificar. Eso indica que se había tomado pocesión y se apagó el dispositivo antes de notificar a la fuente, por lo ue esta no la marcó como "procesada", así que en vez de mandar un error simplemente se llama al método de la fuente avisando que la transacción ya se procesó
+* Asimismo, quien envía transacciones debe estar preparado para el aviso de que se desea notificar que una transacción se procesó más de una vez. 
 
 == Plug-ins in this layer
 
