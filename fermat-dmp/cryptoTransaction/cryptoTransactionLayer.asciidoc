@@ -81,7 +81,7 @@ Esto da lugar a que se intente guardar en la base de datos una transacción ya g
 [[Fermat-DMP-CryptoTransactionLayer-TransactionTransferProtocol-EBDProtocol]]
 === Caso de tres módulos
 
-Llamaremos a este caso el Protocolo EPR (Protocolo **E**mitter-**B**ridge-**D**estination). +
+Llamaremos a este caso el Protocolo EBD (Protocolo **E**mitter-**B**ridge-**D**estination). +
 En este caso tenemos tres módulos involucrados en el intercambio de transacciones.
 
 * Un módulo E de tipo T (emisor original).
