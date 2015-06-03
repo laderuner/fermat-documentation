@@ -49,7 +49,8 @@ This cointainers descriptions are a draft presentation. We will add some fields 
 
 An important aspect to consider is that lower layers (like network services and crypto networks) will interact with this containers as they are the layers that will give us this information. +
 
-== Transaction Protocol (DRAFT)
+[[Fermat-DMP-CryptoTransactionLayer-TransactionTransferProtocol]]
+== Transaction Transfer Protocol (DRAFT)
 
 Este protocolo involucra dos tipos de módulos T y R. Los tipo T transfiere la responsabilidad de transacciones que poseen y los tipo R reciben la responsabilidad de las transacciones. +
 
@@ -70,25 +71,27 @@ NOTE: Cuando digamos que T recibe una transacción, nos referimos a que tiene un
 ** El primer thread es quien recibe los eventos de T y los registra en una base de datos interna.
 ** El segundo lee los eventos de esta base de datos que llena el thread anterior, va a buscar la lista de transacciones y las guarda una por una en otra base de datos.
 ** El tercero mira la base de datos del thread anterior con transacciones nuevas y le informa a T que recibió correctamente la transacción. Entonces pasa la misma al estado NOTIFIED.
-* Más adelante hablaremos del caso de una comunicación que involucra tres módulos, uno de tipo T (emisor original), uno de tipo R (receptor final) y un puente de tipo que actúa como tipo R para el emisor y R para el receptor final (un puente).
+* <<Fermat-DMP-CryptoTransactionLayer-TransactionTransferProtocol-EBDProtocol,Más adelante>> hablaremos del caso de una comunicación que involucra tres módulos, uno de tipo T (emisor original), uno de tipo R (receptor final) y un puente de tipo que actúa como tipo R para el emisor y R para el receptor final (un puente).
 * Al iniciarse un módulo de tipo R, deberá consultar si sus módulos T asociados tienen transacciones acumuladas. Esto se debe a que el módulo pudo inicializarse tras haber perdido varias notificaciones de transacciones nuevas.
 * Claramente puede llegar una nueva transacción a T antes que R procese toda la lista de transacciones que ha recibido en una consulta anterior. En este caso T dispara nuevamente el evento de que tiene nuevas transacciones. +
 El primer thread de R recibirá ese evento, y luego el segundo thread probablemente traerá en la lista de transacciones nueva transacciones que ya ha registrado pero aún el tercer thread no ha confirmado recepción. +
 Esto da lugar a que se intente guardar en la base de datos una transacción ya guardada, dicho caso no deberá considerarse como un error y simplemente deberá ser ignorado. +
 * Por otro lado T debe estar preparado para el aviso de que se desea notificar que una transacción se procesó más de una vez. Esto puede darse en el caso en que el tercer thread de R notificó la recepción pero no llegó a persistir en su base de datos el aviso de NOTIFIED, T ignorará el aviso y si todo es correcto esta vez R sí podrá marcar la transacción como NOTIFIED.
 
+[[Fermat-DMP-CryptoTransactionLayer-TransactionTransferProtocol-EBDProtocol]]
 === Caso de tres módulos
 
-Llamaremos a este caso el Protocolo EPR (Protocolo **E**misor-**P**uente-**D**estinatario). +
+Llamaremos a este caso el Protocolo EPR (Protocolo **E**mitter-**B**ridge-**D**estination). +
 En este caso tenemos tres módulos involucrados en el intercambio de transacciones.
 
 * Un módulo E de tipo T (emisor original).
 * Un módulo D de tipo R (destinatario final)
-* Un módulo P que es tanto de tipo T como R (puente entre E y R)
+* Un módulo B que es tanto de tipo T como R (puente entre E y R)
 
 La utilidad de este protocolo se da cuando un módulo (E) debe delegar una transacción pero no tiene forma de saber a quién debe hacerlo. En este caso se coloca a un receptor temporal (P) que sí puede determinar quién es el receptor indicado para la transacción (D). +
 
-La variación es leve, Los módulos E y D actuarán como explicamos antes en el protocolo (no saben que hay un puente)
+La variación es leve, Los módulos E y D actuarán como explicamos antes en el protocolo simple (no saben que hay un puente), el puente "simplemente" agregará un cuarto thread que lea la tabla que tiene el thread 3 y actúa como un módulo tipo T pero toma las transacciones en estado NOTIFIED en lugar de NEW. +
+Al esperar que estén en NOTIFIED en lugar de NEW se garantiza que el traspazo de la transacción de E a B fue completado antes de comenzar a transmitir de B a D.
 
 == Plug-ins in this layer
 
