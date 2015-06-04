@@ -97,24 +97,25 @@ Este protocolo será implementado por diversos plug-ins que interactúan con est
 
 == Problemas a resolver
 
-Con el planteo actual, al agregarse módulos que envíen eventos a los componentes de esta capa, se deberán hacer modificaciones en los módulos que esperan eventos para atender transacciones nuevas. +
-Se debe pensar una manera de solucionar este problema. Por un lado hay que buscar una alternativa para que los módulos tipo R no requieran consultar a sus T asociados al inicializarse. +
+Con el planteo actual, al agregarse un plug-in que envíe eventos al incoming crypto (por ejemplo más redes crypto como la de litecoin), se deberán hacer modificaciones en incoming crypto para que pueda atender transacciones de ese nuevo plug-in. +
+Para desacoplar esto requerimos dos cosas: +
+Por un lado hay que buscar una alternativa para que los módulos tipo R no requieran consultar a sus T asociados al inicializarse (buscar que el incoming crypto no tenga que consultar al inicializarse a los módulos que le envían eventos). +
 Algunas idras para solucionar eso serían:
 
-* Que los módulos tipo T envíen periódicamente un evento que notifique que hay transacciones pendientes de transferir pocesión. Así evitaríamos que los tipo
+* Que los módulos tipo T (los que envían eventos al incoming crypto) envíen periódicamente un evento que notifique que hay transacciones pendientes de transferir pocesión.
 
-El otro problema consiste en que cuando el plug-in Incoming Crypto recibe un evento, debe tomar el origen del evento y usar la referencia del módulo correspondiente (ejemplo: bitcoin de la crypto network o blockchaininfo de world). Actualmente esto se hace implementando una interfaz DealsWith por cada plug-in sobre el que se tiene que hacer referencia (ver nota de más abajo), pero esto no es apropiado para este caso porque implica que al agregar por ejemplo un módulo para la red litecoin en crypto network tendría que modificar esta capa para agregar las referencias. Por otro lado (e independientemente de si use uno o varios DealsWith) la referencia debe existir porque inevitablemente se debe interactuar con los módulos que reciben las transacciones.
+El otro problema consiste en que cuando el plug-in Incoming Crypto recibe un evento, debe tomar el origen del evento y usar la referencia del módulo correspondiente (ejemplo: bitcoin de la crypto network o blockchaininfo de world). Actualmente, por lo que entiendo esto se hace implementando una interfaz DealsWith por cada plug-in sobre el que se tiene que hacer referencia (ver nota de más abajo), pero esto no es apropiado para este caso porque implica que al agregar por ejemplo un módulo para la red litecoin en crypto network tendría que modificar esta capa para agregar las referencias. Por otro lado (e independientemente de si use uno o varios DealsWith) la referencia debe existir porque inevitablemente se debe interactuar con los plug-ins que reciben las transacciones.
 
-NOTE: Quizás se pueda usar un solo DealsWith sobre una interfaz que en este caso es común a todos los módulos, sería la interfaz con los dos métodos de T que se describen, pero hay que analizar si la información de las transacciones es uniforma con todas las redes crypto
+NOTE: Quizás se pueda usar un solo DealsWith sobre una interfaz que en este caso es común a todos los módulos, sería la interfaz con los dos métodos de T que se describen, pero hay que analizar si la información de las transacciones es uniforme con todas las redes crypto. De todas formas, esto no resolvería el problema porque seguiría requiriendo referencias a los nuevos módulos que implementen esta interfaz.
 
 Este problema lo veo repetido en varios lados, por ejemplo:
 
 * En la capa de transacciones, dado el tipo de billetera debemos obtener el manejador adecuado para esa billetera
-* En las nich wallet type, dado un tipo de transacción debemos obtener el manejador adecuado según el destino de la transacción
-* En la capa de transacciones, dado el tipo de red crypto necesitamos obtener una referencia en particular (en este caso el problema es más amplio porque puedo requerir las cosas de World, pero podría enviar en los eventos la capa de la que proviene el source además del identificador del mismo)
+* También en la capa de transacciones, dado el tipo de red crypto necesitamos obtener una referencia en particular (en este caso el problema es más amplio porque puedo requerir las cosas de World, pero podría enviar en los eventos la capa de la que proviene el source además del identificador del mismo)
+* En las nich wallet type, dado un tipo de transacción debemos obtener el manejador adecuado según el destino de la transacción (outgoing intra user, outgoing extra user)
 * Creo que he visto este problema también cuando dado el tipo de usuario debemos obtener el manejador adecuado para ese usuario
 
-Es posible (esto es sólo una idea) de que los componentes que realizan esa tarea (darte la referencia al plug-in que uno busca en función al identificador del plug-in) deba incorporarse como una función de capa. Así podríamos desacoplar mejor las cosas (al menos en esta capa). Si recibo un evento, busco la capa de la fuente (esta información debería venir en el evento) y le pido que me pase el manejador del plug-in que busco de esa capa, así si incorporan una nueva red crypto por ejemplo no tendré que cambiar nada en la capa de transacciones porque obtengo las referencias dinámicamente a medida que las necesito en lugar de obtenerlas al momento de inicialización. 
+Es posible (esto es sólo una idea) de que los componentes que realizan esa tarea (darte la referencia a la interfaz que uno busca en función al identificador del plug-in) deba incorporarse como una función de capa. Así podríamos desacoplar mejor las cosas (al menos en esta capa). Si recibo un evento, busco la capa de la fuente (esta información debería venir en el evento) y le pido que me pase el manejador del plug-in que busco de esa capa, así si incorporan una nueva red crypto por ejemplo no tendré que cambiar nada en la capa de transacciones porque obtengo las referencias dinámicamente a medida que las necesito en lugar de obtenerlas todas juntas al momento de inicialización de la plataforma. 
 
 == Plug-ins in this layer
 
