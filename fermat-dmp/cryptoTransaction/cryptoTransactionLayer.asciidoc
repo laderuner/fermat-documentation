@@ -78,6 +78,37 @@ El primer thread de R recibirá ese evento, y luego el segundo thread probableme
 Esto da lugar a que se intente guardar en la base de datos una transacción ya almacenada, dicho caso no deberá considerarse como un error y simplemente deberá ser ignorado. +
 * Por otro lado T debe estar preparado para el aviso de que se desea notificar que una transacción se procesó más de una vez. Esto puede darse en el caso en que el tercer thread de R notificó la recepción pero no llegó a persistir en su base de datos el cambio de estado a NOTIFIED, T ignorará el aviso y si todo es correcto esta vez R sí podrá marcar la transacción como NOTIFIED.
 
+NOTA PARA EZEQUIEL: Hasta acá todo bien en general. Lo unico que yo ajustaría sería la nomenclatura para que se alinie aun mas con la forma en que lo explicamos oralmente. Y ahí vuelvo al concepto de la responsabilidad de cada módulo. 
+
+En las crypto networks o billeteras externas, las transacciones debieras tener estos estados:
+
+Crypto Estado: SUBMITTED --> ACCEPTED --> CONFIRMED | REVERSED
+Estado de la transacción: RESPONSABILITY --> DELIVERED
+Estado de la notificación: NO_ACTION_REQUIRED --> TO_BE_NOTIFIED --> NOTIFIED
+
+Por otro lado, los estados en R cuando es un puente, para mí serían: 
+
+Estado de la transacción: ACKNOWLEDGED --> RESPONSABILITY --> DELIVERED
+Estado de la notificación: NO_ACTION_REQUIRED --> TO_BE_NOTIFIED --> NOTIFIED
+
+Finalmente en el R cuando es quien aplica las transacciones:
+
+Estado de la transacción: ACKNOWLEDGED --> RESPONSABILITY --> APPLIED
+Estado de la notificación: NO_ACTION_REQUIRED --> TO_BE_NOTIFIED --> NOTIFIED
+
+La cadena en teoría tendría un nivel mas, donde el que sigue es la capa ahora llamada Device Private Network que se encargaría de sincronizar las transacciones en mas de un dispositivo. (Mas adelante)
+
+Por otro lado, desde mi punto de vista, hablando del asunto de si R tiene que ir a buscar las transacciones cuando se levante por las dudas o T tiene que disparar un evento cada tanto si no le vienen a buscar una transacción yo creo que la solución es las dos cosas. 
+
+Porque? 
+
+1-Es responsabilidad de R tomar control de las transacciones, por lo tanto si el estuvo durmiendo, es lógico que cuando se despierta tiene que ir a ver si hay algo porque potencialmente se perdió los eventos.
+
+2-Es responsabilidad de T entregar el control de la transaccion, con lo cual si nadie la viene a buscar, cada tanto tiene que seguir avisando. Esto en el futuro pudiera encender una acción en un ser superior que llamaremos Dios (D) que todo lo ve, y pudiera llegar a hacer algo con eso. JA JA JA.
+
+Por favor usá lo que te escribí donde corresponda en tu texto.
+
+
 [[Fermat-DMP-CryptoTransactionLayer-TransactionTransferProtocol-SBDProtocol]]
 === Caso de tres módulos
 
