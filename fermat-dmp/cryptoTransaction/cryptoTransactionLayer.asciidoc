@@ -50,48 +50,71 @@ This cointainers descriptions are a draft presentation. We will add some fields 
 An important aspect to consider is that lower layers (like network services and crypto networks) will interact with this containers as they are the layers that will give us this information. +
 
 [[Fermat-DMP-CryptoTransactionLayer-TransactionTransferProtocol]]
-== Transaction Transfer Protocol (DRAFT)
+== Transaction Transfer Protocol (DRnAFT)
 
-Este protocolo involucra dos tipos de módulos T y R. Los tipo T transfiere la responsabilidad de transacciones que poseen y los tipo R reciben la responsabilidad de las transacciones. +
+Este protocolo involucra dos tipos de módulos T y R. Los tipo T transfieren la responsabilidad de transacciones que poseen y los tipo R reciben la responsabilidad de las transacciones. El tener la responsabilidad significa que deben realizar alguna tarea con la información de la transacción transmitida. +
 
-IMPORTANT: Este protocolo asume que los módulos tipo R saben quienes son sus posible T asociados (quienes les transmiten transacciones).
+IMPORTANT: Este protocolo asume que los módulos tipo R saben quienes son sus posible T asociados (quienes les transmiten transacciones). Los módulos tipo T no conocen la ideantidad de los R, por ende este protocolo es útil para reansmitir información de una capa inferior a una superior.
 
-Pensemos en la interacción de un módulo T que desea enviar una transacción a R. 
+Sean T un módulo de tipo T y R un módulo de tipo R. Pensemos en la situación en que T desea enviar una transacción a R. 
 
-NOTE: Cuando digamos que T recibe una transacción, nos referimos a que tiene una nueva transacción que notificar.
+NOTE: Cuando digamos que T recibe/registra una transacción nueva, nos referimos a que tiene una nueva transacción que notificar.
 
 .Pasos del protocolo
 . T registra una transacción nueva que debe ceder a otro módulo, entonces la guarda en su base de datos interna con el estado NEW y notifica con un evento para que el módulo responsable busque dicha transacción.
-. R escucha el evento de T, mira que el origen del evento es T y llama a un método de la interfaz de T que retorna una lista con todas las transacciones que tiene guardada en estado NEW. **T no cambia el estado de las transacciones que tiene almacenadas cuando R hace esta consulta.**
+. R escucha el evento que lanzó T, mira que el origen del evento es T y llama a un método de la interfaz de T que retorna una lista con todas las transacciones que tiene guardada en estado NEW. **T no cambia el estado de las transacciones que tiene almacenadas cuando R hace esta consulta.**
 . R toma la lista y almacena en una base de datos interna cada transacción de a una a la vez con el estado NEW. 
-. Luego, para cada transacción en estado NEW, R llama a otro método de T al cual le pasa el ID de la transacción y este marca en su base de datos interna a dicha transacción como OLD. *Luego de esa llamada para confirmar recepción* R marca la transacción en estado NOTIFIED. El motivo por el cual primero se notifica y luego se confirma se hace para garantizar que la transacción fue correctamente confirmada por T antes de marcar que lo fue en la base de datos.
+. Luego, para cada transacción en estado NEW en su base de datos, R llama a otro método de T al cual le pasa el ID de la transacción. La ejecución de este método marca en la base de datos de T a dicha transacción como OLD. *Luego de esa llamada al método de T*, R marca la transacción en estado NOTIFIED. El motivo por el cual primero se notifica y luego se confirma se hace para garantizar que la transacción fue correctamente confirmada por T antes de marcar que lo fue en la base de datos de R.
 
 .NOTAS DEL PROTOCOLO
 * Cuando se involucra sólo a dos módulos (uno de tipo R y otro T), este protocolo se implementa con 3 threads en R.
 ** El primer thread es quien recibe los eventos de T y los registra en una base de datos interna.
-** El segundo lee los eventos de esta base de datos que llena el thread anterior, va a buscar la lista de transacciones y las guarda una por una en otra base de datos.
-** El tercero mira la base de datos del thread anterior con transacciones nuevas y le informa a T que recibió correctamente la transacción. Entonces pasa la misma al estado NOTIFIED.
-* <<Fermat-DMP-CryptoTransactionLayer-TransactionTransferProtocol-EBDProtocol,Más adelante>> hablaremos del caso de una comunicación que involucra tres módulos, uno de tipo T (emisor original), uno de tipo R (receptor final) y un módulo que actúa como tipo R para el emisor y como tipo T para el receptor final (un puente).
+** El segundo lee los eventos de esta base de datos que llena el thread anterior, va a buscar la lista de transacciones y las guarda una por una en otra tabla de la base de datos.
+** El tercero mira la tabla que llena del thread anterior con transacciones nuevas y le informa a T que recibió correctamente la transacción. Entonces pasa la misma al estado NOTIFIED.
+* <<Fermat-DMP-CryptoTransactionLayer-TransactionTransferProtocol-SBDProtocol,Más adelante>> hablaremos del caso de una comunicación que involucra tres módulos, uno de tipo T (emisor original), uno de tipo R (receptor final) y un módulo intermedio que actúa como tipo R para el emisor original y como tipo T para el receptor final (un puente).
 * Al iniciarse un módulo de tipo R, deberá consultar si sus módulos T asociados tienen transacciones acumuladas. Esto se debe a que el módulo pudo inicializarse tras haber perdido varias notificaciones de transacciones nuevas.
 * Claramente puede llegar una nueva transacción a T antes que R procese toda la lista de transacciones que ha recibido en una consulta anterior. En este caso T dispara nuevamente el evento de que tiene nuevas transacciones. +
-El primer thread de R recibirá ese evento, y luego el segundo thread probablemente traerá en la lista de transacciones nueva transacciones que ya ha registrado pero aún el tercer thread no ha confirmado recepción. +
-Esto da lugar a que se intente guardar en la base de datos una transacción ya guardada, dicho caso no deberá considerarse como un error y simplemente deberá ser ignorado. +
-* Por otro lado T debe estar preparado para el aviso de que se desea notificar que una transacción se procesó más de una vez. Esto puede darse en el caso en que el tercer thread de R notificó la recepción pero no llegó a persistir en su base de datos el aviso de NOTIFIED, T ignorará el aviso y si todo es correcto esta vez R sí podrá marcar la transacción como NOTIFIED.
+El primer thread de R recibirá ese evento, y luego el segundo thread probablemente traerá, en la lista de transacciones nueva, transacciones que ya ha registrado pero aún el tercer thread no ha confirmado recepción. +
+Esto da lugar a que se intente guardar en la base de datos una transacción ya almacenada, dicho caso no deberá considerarse como un error y simplemente deberá ser ignorado. +
+* Por otro lado T debe estar preparado para el aviso de que se desea notificar que una transacción se procesó más de una vez. Esto puede darse en el caso en que el tercer thread de R notificó la recepción pero no llegó a persistir en su base de datos el cambio de estado a NOTIFIED, T ignorará el aviso y si todo es correcto esta vez R sí podrá marcar la transacción como NOTIFIED.
 
-[[Fermat-DMP-CryptoTransactionLayer-TransactionTransferProtocol-EBDProtocol]]
+[[Fermat-DMP-CryptoTransactionLayer-TransactionTransferProtocol-SBDProtocol]]
 === Caso de tres módulos
 
-Llamaremos a este caso el Protocolo EBD (Protocolo **E**mitter-**B**ridge-**D**estination). +
+Llamaremos a este caso el Protocolo SBD (Protocolo **S**ource-**B**ridge-**D**estination). +
 En este caso tenemos tres módulos involucrados en el intercambio de transacciones.
 
-* Un módulo E de tipo T (emisor original).
+* Un módulo S de tipo T (emisor original).
 * Un módulo D de tipo R (destinatario final)
 * Un módulo B que es tanto de tipo T como R (puente entre E y R)
 
-La utilidad de este protocolo se da cuando un módulo (E) debe delegar una transacción pero no tiene forma de saber a quién debe hacerlo. En este caso se coloca a un receptor temporal (P) que sí puede determinar quién es el receptor indicado para la transacción (D). +
+La utilidad de este protocolo se da cuando un módulo (S) debe delegar una transacción pero no tiene forma de saber a quién debe hacerlo. En este caso se coloca a un receptor temporal (B) que sí puede determinar quién es el receptor indicado para la transacción (D). +
 
-La variación es leve, Los módulos E y D actuarán como explicamos antes en el protocolo simple (no saben que hay un puente), el puente "simplemente" agregará un cuarto thread que lea la tabla que tiene el thread 3 y actúa como un módulo tipo T pero toma las transacciones en estado NOTIFIED en lugar de NEW. +
-Al esperar que estén en NOTIFIED en lugar de NEW se garantiza que el traspazo de la transacción de E a B fue completado antes de comenzar a transmitir de B a D.
+La variación es leve, Los módulos S y D actuarán como explicamos antes en el protocolo simple (no saben que hay un puente), el puente "simplemente" agregará un cuarto thread que lea la tabla que llena el thread 3 y actúa como un módulo tipo T pero envía las transacciones cuando están en estado NOTIFIED en lugar de NEW. +
+Al esperar que estén en NOTIFIED en lugar de NEW se garantiza que el traspazo de la transacción de S a B fue completado exitosamente antes de comenzar a transmitir de B a D.
+
+Este protocolo será implementado por diversos plug-ins que interactúan con esta capa.
+
+== Problemas a resolver
+
+Con el planteo actual, al agregarse módulos que envíen eventos a los componentes de esta capa, se deberán hacer modificaciones en los módulos que esperan eventos para atender transacciones nuevas. +
+Se debe pensar una manera de solucionar este problema. Por un lado hay que buscar una alternativa para que los módulos tipo R no requieran consultar a sus T asociados al inicializarse. +
+Algunas idras para solucionar eso serían:
+
+* Que los módulos tipo T envíen periódicamente un evento que notifique que hay transacciones pendientes de transferir pocesión. Así evitaríamos que los tipo
+
+El otro problema consiste en que cuando el plug-in Incoming Crypto recibe un evento, debe tomar el origen del evento y usar la referencia del módulo correspondiente (ejemplo: bitcoin de la crypto network o blockchaininfo de world). Actualmente esto se hace implementando una interfaz DealsWith por cada plug-in sobre el que se tiene que hacer referencia (ver nota de más abajo), pero esto no es apropiado para este caso porque implica que al agregar por ejemplo un módulo para la red litecoin en crypto network tendría que modificar esta capa para agregar las referencias. Por otro lado (e independientemente de si use uno o varios DealsWith) la referencia debe existir porque inevitablemente se debe interactuar con los módulos que reciben las transacciones.
+
+NOTE: Quizás se pueda usar un solo DealsWith sobre una interfaz que en este caso es común a todos los módulos, sería la interfaz con los dos métodos de T que se describen, pero hay que analizar si la información de las transacciones es uniforma con todas las redes crypto
+
+Este problema lo veo repetido en varios lados, por ejemplo:
+
+* En la capa de transacciones, dado el tipo de billetera debemos obtener el manejador adecuado para esa billetera
+* En las nich wallet type, dado un tipo de transacción debemos obtener el manejador adecuado según el destino de la transacción
+* En la capa de transacciones, dado el tipo de red crypto necesitamos obtener una referencia en particular (en este caso el problema es más amplio porque puedo requerir las cosas de World, pero podría enviar en los eventos la capa de la que proviene el source además del identificador del mismo)
+* Creo que he visto este problema también cuando dado el tipo de usuario debemos obtener el manejador adecuado para ese usuario
+
+Es posible (esto es sólo una idea) de que los componentes que realizan esa tarea (darte la referencia al plug-in que uno busca en función al identificador del plug-in) deba incorporarse como una función de capa. Así podríamos desacoplar mejor las cosas (al menos en esta capa). Si recibo un evento, busco la capa de la fuente (esta información debería venir en el evento) y le pido que me pase el manejador del plug-in que busco de esa capa, así si incorporan una nueva red crypto por ejemplo no tendré que cambiar nada en la capa de transacciones porque obtengo las referencias dinámicamente a medida que las necesito en lugar de obtenerlas al momento de inicialización. 
 
 == Plug-ins in this layer
 
