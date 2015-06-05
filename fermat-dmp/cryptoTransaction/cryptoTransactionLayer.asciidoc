@@ -75,7 +75,7 @@ NOTE: Cuando digamos que T recibe/registra una transacción nueva, nos referimos
 . T registra una transacción nueva que debe procesar, entonces la guarda en su base de datos interna con el par de estados (RESPONSIBLE, NO_ACTION_REQUIRED). 
 . Cuando T (siguiendo su lógica interna) concluye que debe enviar transacciones que están en el estado (RESPONSIBLE,NO_ACTION_REQUIRED) a otro módulo (que será de tipo R), pasa a estas transacciones al estado   (RESPONSIBLE, TO_BE_NOTIFIED).
 . T controla si tiene transacciones en la combinación (RESPONSIBLE,TO_BE_NOTIFIED). 
-** Si tiene transacciones en ese estado, envía el evento TransactionsWaitingTransferenceEvent, para que un módulo responsable se haga cargo y *luego de envíar el evento* pasa las transacciones del estado (RESPONSIBLE,TO_BE_NOTIFIED) al estado (RESPONSIBLE, NOTIFIED).
+** Si tiene transacciones en estado (RESPONSIBLE, TO_BE_NOTIFIED) o (RESPONSIBLE, NOTIFIED), envía el evento TransactionsWaitingTransferenceEvent, para que un módulo responsable se haga cargo y *luego de envíar el evento* pasa las transacciones del estado (RESPONSIBLE,TO_BE_NOTIFIED) al estado (RESPONSIBLE, NOTIFIED). 
 ** Si no tiene transacciones en ese estado sigue con el análisis del resto de las transacciones.
 . R escucha el evento que lanzó T, mira que el origen del evento es T y llama a un método de la interfaz de T que retorna una lista con todas las transacciones que tiene guardadas en estado (RESPONSIBLE, NOTIFIED). **T no cambia el estado de las transacciones que tiene almacenadas cuando R hace esta consulta.**
 . R toma la lista y almacena en una base de datos interna cada transacción de a una a la vez con el estado (ACKNOWLEDGED, TO_BE_NOTIFIED). 
@@ -83,20 +83,24 @@ NOTE: Cuando digamos que T recibe/registra una transacción nueva, nos referimos
 
 Aquí termina el protocolo de traspaso simple, pero podemos considerar un paso extra para contemplar la acción que realiza R sobre las transacciones recibidas. 
 
-[start=5]
-. R toma las transacciones en estado (RESPONSIBLE, NOTIFIED) y realiza su tarea. *Luego de aplcar la tarea* las pasa a (RESPONSIBLE, APPLIED)
+[start=6]
+. R toma las transacciones en estado (RESPONSIBLE, NOTIFIED) y realiza su tarea. *Luego de aplcar la tarea* las pasa a (APPLIED, NOTIFIED)
 
 .NOTAS DEL PROTOCOLO
-* Cuando se involucra sólo a dos módulos (uno de tipo R y otro T), este protocolo se implementa con 3 threads en R.
-** El primer thread es quien recibe los eventos de T y los registra en una base de datos interna.
-** El segundo lee los eventos de esta base de datos que llena el thread anterior, va a buscar la lista de transacciones y las guarda una por una en otra tabla de la base de datos.
-** El tercero mira la tabla que llena del thread anterior con transacciones nuevas y le informa a T que recibió correctamente la transacción. Entonces pasa la misma al estado NOTIFIED.
+* Cuando se involucra sólo a dos módulos (uno de tipo R y otro T), este protocolo se implementa con 3 agentes en R y dos en T.
+** El main thread de R es quien recibe los eventos de T y los registra en una base de datos interna.
+** El primer agente lee los eventos de esta base de datos que llena el main thread, va a buscar la lista de transacciones a T y las guarda una por una en otra tabla de la base de datos con el estado (ACKNOWLEDGED, TO_BE_NOTIFIED).
+** El segundo agente mira la tabla que llena el agente anterior con transacciones nuevas y le informa a T que recibió correctamente las transacciones de a una a la vez. Entonces, *tras confirmarle a T la recepción* pasa la misma al estado (RESPONSIBLE, NOTIFIED).
+** El tercer agente aplica la tarea de R sobre las transacciones (RESPONSIBLE, NOTIFIED) y las pasa al estado (APPLIED, NO_ACTION_REQUIRED).
+** En primer agente de T es quien monitorea la aparición de nuevas transacciones y las escribe en una tabla con el estado (RESPONSIBLE, NO_ACTION_INTENDED).
+** El segundo agente mira esa tabla, ejecuta una lógica interna y cuando determina que deben traspasarse las transacciones a otro módulo pasa las transacciones correspondientes del estado (RESPONSIBLE, NO_ACTION_INTENDED) a (RESPONSIBLE, TO_BE_NOTIFIED)
+** El tercer agente es quien se despierta periódicamente, lee las transacciones en estado (RESPONSIBLE, TO_BE_NOTIFIED) o (RESPONSIBLE, NOTIFIED) y envía el evento TransactionsWaitingTransferenceEvent y marca las que eran TO_BE_NOTIFIED como (RESPONSIBLE, NOTIFIED). *Notar que sigue en estado RESPONSIBLE*.
 
-NOTE: La separación entre el agente 2 y el agente 3 es necesaria porque si se notoficara que llegó una transacción antes de marcarla como NEW y luego se callera el sistema, la transacción no se habría registrado y el emisor la tendría marcada como notificada.
+NOTE: La separación entre el agente 1 y el agente 2 de R es necesaria porque si se notoficara que llegó una transacción antes de marcarla como (ACKNOWLEDGED, TO_BE_NOTIFIED) y luego se callera el sistema, la transacción no se habría registrado y el emisor la tendría marcada como notificada.
 
 * <<Fermat-DMP-CryptoTransactionLayer-TransactionTransferProtocol-SBDProtocol,Más adelante>> hablaremos del caso de una comunicación que involucra tres módulos, uno de tipo T (emisor original), uno de tipo R (receptor final) y un módulo intermedio que actúa como tipo R para el emisor original y como tipo T para el receptor final (un puente).
 * Al iniciarse un módulo de tipo R, deberá consultar si sus módulos T asociados tienen transacciones acumuladas. Esto se debe a que el módulo pudo inicializarse tras haber perdido varias notificaciones de transacciones nuevas.
-* Claramente puede llegar una nueva transacción a T antes que R procese toda la lista de transacciones que ha recibido en una consulta anterior. En este caso T dispara nuevamente el evento de que tiene nuevas transacciones. +
+* Claramente puede llegar una nueva transacción a T antes que R procese toda la lista de transacciones que ha recibido en una consulta anterior. En este caso T podría disparar nuevamente el evento de que avisa que tiene nuevas transacciones. +
 El primer thread de R recibirá ese evento, y luego el segundo thread probablemente traerá, en la lista de transacciones nueva, transacciones que ya ha registrado pero aún el tercer thread no ha confirmado recepción. +
 Esto da lugar a que se intente guardar en la base de datos una transacción ya almacenada, dicho caso no deberá considerarse como un error y simplemente deberá ser ignorado. +
 * Por otro lado T debe estar preparado para el aviso de que se desea notificar que una transacción se procesó más de una vez. Esto puede darse en el caso en que el tercer thread de R notificó la recepción pero no llegó a persistir en su base de datos el cambio de estado a NOTIFIED, T ignorará el aviso y si todo es correcto esta vez R sí podrá marcar la transacción como NOTIFIED.
@@ -144,7 +148,7 @@ En este caso tenemos tres módulos involucrados en el intercambio de transaccion
 
 La utilidad de este protocolo se da cuando un módulo (S) debe delegar una transacción pero no tiene forma de saber a quién debe hacerlo. En este caso se coloca a un receptor temporal (B) que sí puede determinar quién es el receptor indicado para la transacción (D). +
 
-La variación es leve, Los módulos S y D actuarán como explicamos antes en el protocolo simple (no saben que hay un puente), el puente "simplemente" agregará un cuarto thread que lea la tabla que llena el thread 3 y actúa como un módulo tipo T pero envía las transacciones cuando están en estado NOTIFIED en lugar de NEW. +
+La variación es leve, Los módulos S y D actuarán como explicamos antes en el protocolo simple (no saben que hay un puente), el puente "simplemente" hará que su cuarto thread lea la tabla que llena el thread 3 y actúa como un módulo tipo T cuya acción es envíar las transacciones cuando están en estado (RESPONSIBLE, NOTIFIED) en lugar de NEW). +
 Al esperar que estén en NOTIFIED en lugar de NEW se garantiza que el traspazo de la transacción de S a B fue completado exitosamente antes de comenzar a transmitir de B a D.
 
 Este protocolo será implementado por diversos plug-ins que interactúan con esta capa.
