@@ -56,7 +56,7 @@ An important aspect to consider is that lower layers (like network services and 
 
 Este protocolo involucra dos tipos de módulos T y R. Los tipo T transfieren la responsabilidad de transacciones que poseen y los tipo R reciben la responsabilidad de las transacciones. El tener la responsabilidad significa que deben realizar alguna tarea con la información de la transacción transmitida. +
 
-IMPORTANT: Este protocolo asume que los módulos tipo R saben quienes son sus T asociados (quienes les transmiten transacciones). Los módulos tipo T no conocen la ideantidad de los R.
+IMPORTANT: Este protocolo asume que los módulos tipo R saben quienes son sus T asociados (quienes les transmiten transacciones). Los módulos tipo T no conocen la ideantidad de los R, sin embargo es posible que un módulo de tipo T deba clasificar transacciones y entregar distintos grupos a distintos receptores o dar la opción de dar distintos gruposa un mismo receptor. Presentaremos primero el caso de un sólo emisor y receptor y luego agregaremos leves adaptaciones para adaptarnos al caso más general. 
 
 Sean T un módulo de tipo T y R un módulo de tipo R. 
 Debemos considerar algunas cosas:
@@ -90,12 +90,13 @@ Aquí termina el protocolo de traspaso simple, pero podemos considerar un paso e
 [start=7]
 . R toma las transacciones en estado (RESPONSIBLE, RECEPTION_NOTIFIED) y realiza su tarea. *Luego de aplcar la tarea* las pasa a (APPLIED, RECEPTION_NOTIFIED)
 
+[[Fermat-DMP-CryptoTransactionLayer-TransactionTransferProtocol-TransactionSenderAprox]]
 .NOTAS DEL PROTOCOLO
-* Dado que mencionamos dos métodos de T, podemos definir una interfaz llamada TransactionsSender que los identifique. 
+* Dado que mencionamos dos métodos de T, podemos definir una interfaz llamada `TransactionsSender` que los identifique. 
 ** `List<TransactionInformation> getPendingTransactions()` para obtener la lista de transacciones a traspazar
 ** `void confirmReception(TransactionID x)` para comunicar la recepción de una transacción.
 
-NOTE: La clase TransactionInformation 
+NOTE: Para la versión final del protocolo esta interfaz se modificará levemente. 
 
 * Cuando se involucra sólo a dos módulos (uno de tipo R y otro T), este protocolo se implementa con tres agentes en T y otros tres en R.
 ** El main thread de T es quien implementa la interfaz de transacciones de T (los métodos.
@@ -145,20 +146,24 @@ En este caso tenemos tres módulos involucrados en el intercambio de transaccion
 
 La utilidad de este protocolo se da cuando un módulo (S) debe delegar una transacción pero no tiene forma de saber a quién debe hacerlo. En este caso se coloca a un receptor temporal (B) que sí puede determinar quién es el receptor indicado para la transacción (D). +
 
-La variación es leve, Los módulos S y D actuarán como explicamos antes en el protocolo simple (no saben que hay un puente), el puente "simplemente" hará que su tercer agente (correspondiente al tipo R, o sea el de aplicación) lea la tabla que llena el agente 2 y actúa como un módulo tipo T cuya acción es envíar las transacciones cuando están en estado (RESPONSIBLE, NOTIFIED) en lugar de (RESPONSABLE, TO_BE_NOTIFIED)). +
+Las variaciones a incorporar leves. Los módulos S y D actuarán como explicamos antes en el protocolo simple (no saben que hay un puente), el puente "simplemente" hará que su tercer agente (correspondiente al tipo R, o sea el de aplicación) lea la tabla que llena el agente 2 y actúa como un módulo tipo T cuya acción es envíar las transacciones cuando están en estado (RESPONSIBLE, NOTIFIED) en lugar de (RESPONSABLE, TO_BE_NOTIFIED)). +
 Al esperar que estén en NOTIFIED en lugar de TO_BE_NOTIFIED se garantiza que el traspazo de la transacción de S a B fue completado exitosamente antes de comenzar a transmitir de B a D.
+
+Para considerar la distinción de receptores y otros criterios de clasificación, agregaremos dos parámetros al método `getPendingTransactions` de la interfaz <<Fermat-DMP-CryptoTransactionLayer-TransactionTransferProtocol-TransactionSenderAprox, TransactionSender>> 
+
+```
+  List<TransactionInformation> getPendingTransactions(ReceptorType receptorType, TransactionDescription description)
+```
+
+donde `receptorType` indicará el tipo de receptor al que se le puede entregar la transacción y `descriprion` será la descripción del tipo de transacciones que debe usarse. Ambos serán enums que encapsulan un string.
 
 Revisemos los pasos, el pasaje de las transacciones de S a B es el protocolo normal para mandar de un T a un R. +
 Así que tenemos que B tiene transacciones después del paso 5 del protocolo. Es decir, con el estado (RESPONSIBLE, RECEPTION_NOTIFIED). +
-Aquí el paso 7 será que el tercer agente de B decide a quién debe enviar algunas transacciones, las pasa al estado (RESPONSIBLE, TO_BE_NOTIFIED)  (combinación de estados que no se da en el protocolo simple) y marca de alguna manera el evento a lanzar según el análisis realizado. 
+Aquí el paso 7 será que el tercer agente de B decide a quién debe enviar algunas transacciones, las pasa al estado (RESPONSIBLE, TO_BE_NOTIFIED)  (combinación de estados que no se da en el protocolo simple) y marca la transacción con el receptorType adecuado. También anota el evento a lanzar según el análisis realizado. 
 Un cuarto agente controlará periódicamente si hay transacciones en este estado (RESPONSIBLE, TO_BE_NOTIFIED), lanzará el evento que indicó el thread anterior y pasará la transacción a (RESPONSIBLE, SENDING_NOTIFIED). +
 La implementación del método `confirmReception` de B pasará las transacciones de (RESPONSIBLE, SENDING_NOTIFIED) a
 (DELIVERED, SENDING_NOTIFIED) cerrando la participación de B.
-
-La implementación del método `getPendingTransactions` va a requerir que tome un parámetro que refleje de cierta forma qué transacciones se deben entregar. Recordemos que un punte puede tener varios receptores finales y por ende debe clasificar qué transacciones debe dar a cada receptor. +
-
-IMPORTANT: Probablemente una buena idea sea crear un enum que represente una metadata de la transacción. Esto permitiría no sólo distinguir a quién mandamos la transacción sino también otro tipo de datos, por ejemplo el crypto estado de las transacciones. Así cuando haya un reversed se podría pedir la transacción poniendo como metadata un flag que indique que se entreguen las reversed que no se han notificado. +
-Otra opción sería tener dos parámetros, el metadata por un lado y el de "id de destino" por otro lado. 
+Cuando D pida las transacciones colocará el receptorType que lo identifica y posiblemente una descripción sobre la transacciones que quiere retirar (por ejemplo que estén en crypto estado identified) como parámetros de `getPendingTransaction`
 
 Nuevamente, si nos paramos en una sola tranacción vemos este ciclo de estados en las tablas de T y R.
 ```
@@ -184,7 +189,7 @@ Nuevamente, si nos paramos en una sola tranacción vemos este ciclo de estados e
    AP: APPLIED           RN: RECEPTION_NOTIFIED
 ```
 
-Estos protocolos serán implementado por diversos plug-ins que interactúan con esta capa.
+Estos protocolos serán implementados por diversos plug-ins que interactúan con esta capa.
 
 == Problemas a resolver
 
