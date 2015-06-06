@@ -67,7 +67,7 @@ Debemos considerar algunas cosas:
 Para tener esto en cuanta en los pasos del protocolo, a cada transacción se le agregará un estado de la transacción y un estado de notificación, que notaremos como un par (ESTADO_DE_TRANSACCIÓN, ESTADO_DE_NOTIFICACIÓN). +
 
 * El estado de la transacción podrá ser: ACKNOWLEDGED, RESPONSIBLE, DELIVERED o APPLIED.
-* El estado de la notificación será NO_ACTION_REQUIRED, TO_BE_NOTIFIED o NOTIFIED. 
+* El estado de la notificación será NO_ACTION_REQUIRED, TO_BE_NOTIFIED, RECEPTION_NOTIFIED o SENDING_NOTIFIED. 
 
 El significado y uso de cada estado se explicará a continuación junto con el protocolo.
 
@@ -76,19 +76,19 @@ NOTE: Cuando digamos que T recibe/registra una transacción nueva, nos referimos
 .Pasos del protocolo
 . T registra una transacción nueva que debe procesar, entonces la guarda en su base de datos interna con el par de estados (RESPONSIBLE, NO_ACTION_REQUIRED). 
 . Cuando T (siguiendo su lógica interna) concluye que debe enviar transacciones que están en el estado (RESPONSIBLE,NO_ACTION_REQUIRED) a otro módulo (que será de tipo R), pasa a estas transacciones al estado   (RESPONSIBLE, TO_BE_NOTIFIED).
-. Periódicamente T revisa si tiene transacciones en la combinación (RESPONSIBLE,TO_BE_NOTIFIED) o (RESPONSIBLE, NOTIFIED). 
-** Si tiene transacciones en alguno de esos pares de estados, envía el evento TransactionsWaitingTransferenceEvent, para que un módulo responsable se haga cargo y *luego de envíar el evento* pasa las transacciones del estado (RESPONSIBLE,TO_BE_NOTIFIED) al estado (RESPONSIBLE, NOTIFIED), las que ya estaban en NOTIFIED no cambian su estado. 
+. Periódicamente T revisa si tiene transacciones en la combinación (RESPONSIBLE,TO_BE_NOTIFIED) o (RESPONSIBLE, SENDING_NOTIFIED). 
+** Si tiene transacciones en alguno de esos pares de estados, envía el evento TransactionsWaitingTransferenceEvent, para que un módulo responsable se haga cargo y *luego de envíar el evento* pasa las transacciones del estado (RESPONSIBLE,TO_BE_NOTIFIED) al estado (RESPONSIBLE, SENDING_NOTIFIED), las que ya estaban en SENDING_NOTIFIED no cambian su estado. 
 ** Si no tiene transacciones en ese estado sigue con el análisis del resto de las transacciones.
-. Por otro lado, cuando R escucha el evento que lanzó T, mira que el origen del evento es T y llama a un método de la interfaz de T que retorna una lista con todas las transacciones que tiene guardadas en estado (RESPONSIBLE, NOTIFIED). **T no cambia el estado de las transacciones que tiene almacenadas cuando R hace esta consulta.**
-. R toma la lista y almacena en una base de datos interna cada transacción de a una a la vez con el estado (ACKNOWLEDGED, TO_BE_NOTIFIED). 
-. Luego, para cada transacción en estado (ACKNOWLEDGED, TO_BE_NOTIFIED) en su base de datos, R llama a otro método de T al cual le pasa el ID de la transacción. La ejecución de este método marca en la base de datos *de T* a dicha transacción como (DELIVERED, NOTIFIED). *Luego de esa llamada al método de T*, *R* marca la transacción en estado (RESPONSIBLE, NOTIFIED). 
+. Por otro lado, cuando R escucha el evento que lanzó T, mira que el origen del evento es T y llama a un método de la interfaz de T que retorna una lista con todas las transacciones que tiene guardadas en estado (RESPONSIBLE, SENDING_NOTIFIED). **T no cambia el estado de las transacciones que tiene almacenadas cuando R hace esta consulta.**
+. R recorre la lista y almacena en una base de datos interna cada transacción de a una a la vez con el estado (ACKNOWLEDGED, TO_BE_NOTIFIED). 
+. Luego, para cada transacción en estado (ACKNOWLEDGED, TO_BE_NOTIFIED) en su base de datos, R llama a otro método de T al cual le pasa el ID de la transacción. La ejecución de este método marca en la base de datos *de T* a dicha transacción como (DELIVERED, RECEPTION_NOTIFIED). *Luego de esa llamada al método de T*, *R* marca la transacción en estado (RESPONSIBLE, RECEPTION_NOTIFIED). 
 
 NOTE: El motivo por el cual primero se notifica y luego se confirma se hace para garantizar que la transacción fue correctamente confirmada por T antes de marcar que lo fue en la base de datos de R.
 
 Aquí termina el protocolo de traspaso simple, pero podemos considerar un paso extra para contemplar la acción que realiza R sobre las transacciones recibidas. 
 
 [start=6]
-. R toma las transacciones en estado (RESPONSIBLE, NOTIFIED) y realiza su tarea. *Luego de aplcar la tarea* las pasa a (APPLIED, NOTIFIED)
+. R toma las transacciones en estado (RESPONSIBLE, RECEPTION_NOTIFIED) y realiza su tarea. *Luego de aplcar la tarea* las pasa a (APPLIED, RECEPTION_NOTIFIED)
 
 .NOTAS DEL PROTOCOLO
 * Dado que mencionamos dos métodos de T, podemos definir una interfaz llamada TransactionsSender que los identifique. 
@@ -100,16 +100,31 @@ NOTE: La clase TransactionInformation
 * Cuando se involucra sólo a dos módulos (uno de tipo R y otro T), este protocolo se implementa con tres agentes en T y otros tres en R.
 ** El main thread de T es quien implementa la interfaz de transacciones de T (los métodos.
 ** En primer agente de T es quien monitorea la aparición de nuevas transacciones y las escribe en una tabla con el estado (RESPONSIBLE, NO_ACTION_INTENDED).
-** El segundo agente mira esa tabla, ejecuta una lógica interna y cuando determina que deben traspasarse las transacciones a otro módulo pasa las transacciones correspondientes del estado (RESPONSIBLE, NO_ACTION_INTENDED) a (RESPONSIBLE, TO_BE_NOTIFIED)
-** El tercer agente es quien se despierta periódicamente, y cuando encuentra transacciones en estado (RESPONSIBLE, TO_BE_NOTIFIED) o (RESPONSIBLE, NOTIFIED) envía el evento TransactionsWaitingTransferenceEvent y marca las que eran TO_BE_NOTIFIED como (RESPONSIBLE, NOTIFIED). *Notar que sigue en estado RESPONSIBLE*.
+** El segundo agente mira esa tabla, ejecuta una lógica interna y cuando determina que deben traspasarse las transacciones a otro módulo pasa las transacciones correspondientes del estado (RESPONSIBLE, NO_ACTION_INTENDED) a (RESPONSIBLE, TO_BE_NOTIFIED).
+** El tercer agente es quien se despierta periódicamente, y cuando encuentra transacciones en estado (RESPONSIBLE, TO_BE_NOTIFIED) o (RESPONSIBLE, SENDING_NOTIFIED) envía el evento TransactionsWaitingTransferenceEvent y marca las que eran TO_BE_NOTIFIED como (RESPONSIBLE, SENDING_NOTIFIED). *Notar que sigue en estado RESPONSIBLE*.
 ** El main thread de R es quien recibe los eventos de T y los registra en una base de datos interna.
 ** El primer agente lee los eventos de esta base de datos que llena el main thread, va a buscar la lista de transacciones a T y las guarda una por una en otra tabla de la base de datos con el estado (ACKNOWLEDGED, TO_BE_NOTIFIED).
 ** El segundo agente mira la tabla que llena el agente anterior con transacciones nuevas y le informa a T que recibió correctamente las transacciones de a una a la vez (a través del método `confirmReception`). Entonces, *tras confirmarle a T la recepción* pasa la misma al estado (RESPONSIBLE, NOTIFIED).
 ** El tercer agente aplica la tarea de R sobre las transacciones (RESPONSIBLE, NOTIFIED) y las pasa al estado (APPLIED, NO_ACTION_REQUIRED).
 
-NOTE: La separación entre el agente 1 y el agente 2 de R es necesaria porque si se notoficara que llegó una transacción antes de marcarla como (ACKNOWLEDGED, TO_BE_NOTIFIED) y luego se apagara el sistema, la transacción no se habría registrado y el emisor la tendría marcada como notificada. 
+* Si nos paramos en una sola tranacción vemos este ciclo de estados en las tablas de T y R.
+```
 
-IMPORTANT: TODO: ME PARECE QUE SE PEDEN INVERTIR PERSISTIENDO PRIMERO Y LLAMÁNDO AL MÉTODO DESPUÉS DADO QUE DE TODAS FORMAS ESTAMOS PREPARADOS PARA QUE NOS MANDEN LA MISMA TRASACCIÓN MÁS DE UNA VEZ.
+            T         R
+   1      (R,NAR)
+   2      (R,TBN)
+   3      (R,SN)
+   4                (AC,TBN)
+   5      (D,RN)
+   6                (R,RN)
+   7                (AP,RN)
+   
+   Referencias:
+   R: RESPONSIBLE        NAR: NO_ACTION_REQUIRED
+   D: DELIVERED          TBN: TO_BE_NOTIFIED
+   AC: ACKNOWLEDGE       SN: SENDING_NOTIFIED
+   AP: APPLIED           RN: RECEPTION_NOTIFIED
+```
 
 * <<Fermat-DMP-CryptoTransactionLayer-TransactionTransferProtocol-SBDProtocol,Más adelante>> hablaremos del caso de una comunicación que involucra tres módulos, uno de tipo T (emisor original), uno de tipo R (receptor final) y un módulo intermedio que actúa como tipo R para el emisor original y como tipo T para el receptor final (un puente).
 * Al iniciarse un módulo de tipo R, deberá consultar si sus módulos T asociados tienen transacciones acumuladas. Esto se debe a que el módulo pudo inicializarse tras haber perdido varias notificaciones de transacciones nuevas.
@@ -117,39 +132,6 @@ IMPORTANT: TODO: ME PARECE QUE SE PEDEN INVERTIR PERSISTIENDO PRIMERO Y LLAMÁND
 El primer thread de R recibirá ese evento, y luego el segundo thread probablemente traerá, en la lista de transacciones nueva, transacciones que ya ha registrado pero aún el tercer thread no ha confirmado recepción. +
 Esto da lugar a que se intente guardar en la base de datos una transacción ya almacenada, dicho caso no deberá considerarse como un error y simplemente deberá ser ignorado. +
 * Por otro lado T debe estar preparado para el aviso de que se desea notificar que una transacción se procesó más de una vez. Esto puede darse en el caso en que el tercer thread de R notificó la recepción pero no llegó a persistir en su base de datos el cambio de estado a NOTIFIED, T ignorará el aviso y si todo es correcto esta vez R sí podrá marcar la transacción como NOTIFIED.
-
-== NOTAS PARA EZEQUIEL (DE LUIS)
-
-Hasta acá todo bien en general. Lo unico que yo ajustaría sería la nomenclatura para que se alinie aun mas con la forma en que lo explicamos oralmente. Y ahí vuelvo al concepto de la responsabilidad de cada módulo. 
-
-En las crypto networks o billeteras externas, las transacciones debieras tener estos estados:
-
-Crypto Estado: SUBMITTED --> ACCEPTED --> CONFIRMED | REVERSED
-Estado de la transacción: RESPONSABILITY --> DELIVERED
-Estado de la notificación: NO_ACTION_REQUIRED --> TO_BE_NOTIFIED --> NOTIFIED
-
-Por otro lado, los estados en R cuando es un puente, para mí serían: 
-
-Estado de la transacción: ACKNOWLEDGED --> RESPONSABILITY --> DELIVERED
-Estado de la notificación: NO_ACTION_REQUIRED --> TO_BE_NOTIFIED --> NOTIFIED
-
-Finalmente en el R cuando es quien aplica las transacciones:
-
-Estado de la transacción: ACKNOWLEDGED --> RESPONSABILITY --> APPLIED
-Estado de la notificación: NO_ACTION_REQUIRED --> TO_BE_NOTIFIED --> NOTIFIED
-
-La cadena en teoría tendría un nivel mas, donde el que sigue es la capa ahora llamada Device Private Network que se encargaría de sincronizar las transacciones en mas de un dispositivo. (Mas adelante)
-
-Por otro lado, desde mi punto de vista, hablando del asunto de si R tiene que ir a buscar las transacciones cuando se levante por las dudas o T tiene que disparar un evento cada tanto si no le vienen a buscar una transacción yo creo que la solución es las dos cosas. 
-
-Porque? 
-
-1-Es responsabilidad de R tomar control de las transacciones, por lo tanto si el estuvo durmiendo, es lógico que cuando se despierta tiene que ir a ver si hay algo porque potencialmente se perdió los eventos.
-
-2-Es responsabilidad de T entregar el control de la transaccion, con lo cual si nadie la viene a buscar, cada tanto tiene que seguir avisando. Esto en el futuro pudiera encender una acción en un ser superior que llamaremos Dios (D) que todo lo ve, y pudiera llegar a hacer algo con eso. JA JA JA.
-
-Por favor usá lo que te escribí donde corresponda en tu texto.
-
 
 [[Fermat-DMP-CryptoTransactionLayer-TransactionTransferProtocol-SBDProtocol]]
 === Caso de tres módulos
@@ -163,32 +145,76 @@ En este caso tenemos tres módulos involucrados en el intercambio de transaccion
 
 La utilidad de este protocolo se da cuando un módulo (S) debe delegar una transacción pero no tiene forma de saber a quién debe hacerlo. En este caso se coloca a un receptor temporal (B) que sí puede determinar quién es el receptor indicado para la transacción (D). +
 
-La variación es leve, Los módulos S y D actuarán como explicamos antes en el protocolo simple (no saben que hay un puente), el puente "simplemente" hará que su cuarto thread lea la tabla que llena el thread 3 y actúa como un módulo tipo T cuya acción es envíar las transacciones cuando están en estado (RESPONSIBLE, NOTIFIED) en lugar de NEW). +
-Al esperar que estén en NOTIFIED en lugar de NEW se garantiza que el traspazo de la transacción de S a B fue completado exitosamente antes de comenzar a transmitir de B a D.
+La variación es leve, Los módulos S y D actuarán como explicamos antes en el protocolo simple (no saben que hay un puente), el puente "simplemente" hará que su tercer agente (correspondiente al tipo R, o sea el de aplicación) lea la tabla que llena el agente 2 y actúa como un módulo tipo T cuya acción es envíar las transacciones cuando están en estado (RESPONSIBLE, NOTIFIED) en lugar de (RESPONSABLE, TO_BE_NOTIFIED)). +
+Al esperar que estén en NOTIFIED en lugar de TO_BE_NOTIFIED se garantiza que el traspazo de la transacción de S a B fue completado exitosamente antes de comenzar a transmitir de B a D.
 
-Este protocolo será implementado por diversos plug-ins que interactúan con esta capa.
+Revisemos los pasos, el pasaje de las transacciones de S a B es el protocolo normal para mandar de un T a un R. +
+Así que tenemos que B tiene transacciones después del paso 5 del protocolo. Es decir, con el estado (RESPONSIBLE, RECEPTION_NOTIFIED). +
+Aquí el paso 6 será que el tercer agente de B decide a quién debe enviar algunas transacciones, las pasa al estado (RESPONSIBLE, TO_BE_NOTIFIED)  (combinación de estados que no se da en el protocolo simple) y marca de alguna manera el evento a lanzar según el análisis realizado. 
+Un cuarto agente controlará periódicamente si hay transacciones en este estado (RESPONSIBLE, TO_BE_NOTIFIED), lanzará el evento que indicó el thread anterior y pasará la transacción a (RESPONSIBLE, SENDING_NOTIFIED). +
+La implementación del método `confirmReception` de B pasará las transacciones de (RESPONSIBLE, SENDING_NOTIFIED) a
+(DELIVERED, SENDING_NOTIFIED) cerrando la participación de B.
+
+La implementación del método `getPendingTransactions` va a requerir que tome un parámetro que refleje de cierta forma qué transacciones se deben entregar. Recordemos que un punte puede tener varios receptores finales y por ende debe clasificar qué transacciones debe dar a cada receptor. +
+
+IMPORTANT: Probablemente una buena idea sea crear un enum que represente una metadata de la transacción. Esto permitiría no sólo distinguir a quién mandamos la transacción sino también otro tipo de datos, por ejemplo el crypto estado de las transacciones. Así cuando haya un reversed se podría pedir la transacción poniendo como metadata un flag que indique que se entreguen las reversed que no se han notificado. +
+Otra opción sería tener dos parámetros, el metadata por un lado y el de "id de destino" por otro lado. 
+
+Nuevamente, si nos paramos en una sola tranacción vemos este ciclo de estados en las tablas de T y R.
+```
+
+              S         B         D
+    1      (R,NAR)
+    2      (R,TBN)
+    3      (R,SN)
+    4               (AC,TBN)
+    5      (D,RN)
+    6                (R,RN)
+    7                (R,TBN)
+    8                (R,SN)
+    9                          (AC,TBN)
+   10                (D,RN)
+   11                           (R,RN)
+   12                          (AP,RN)
+   
+   Referencias:
+   R: RESPONSIBLE        NAR: NO_ACTION_REQUIRED
+   D: DELIVERED          TBN: TO_BE_NOTIFIED
+   AC: ACKNOWLEDGE       SN: SENDING_NOTIFIED
+   AP: APPLIED           RN: RECEPTION_NOTIFIED
+```
+
+Estos protocolos serán implementado por diversos plug-ins que interactúan con esta capa.
 
 == Problemas a resolver
 
-Con el planteo actual, al agregarse un plug-in que envíe eventos al incoming crypto (por ejemplo más redes crypto como la de litecoin), se deberán hacer modificaciones en incoming crypto para que pueda atender transacciones de ese nuevo plug-in. +
-Para desacoplar esto requerimos dos cosas: +
-Por un lado hay que buscar una alternativa para que los módulos tipo R no requieran consultar a sus T asociados al inicializarse (buscar que el incoming crypto no tenga que consultar al inicializarse a los módulos que le envían eventos). +
-Algunas idras para solucionar eso serían:
+=== Simplicidad
 
-* Que los módulos tipo T (los que envían eventos al incoming crypto) envíen periódicamente un evento que notifique que hay transacciones pendientes de transferir pocesión.
+Tengo la impresión de que esto anda y que la explicación es entendible y será fácil de entender la implementación tras leer esto. La duda que tengo es que es muy evidente que puedo fusionar algunos threads. Por ejemplo, podría optimizarse la implementación si el agente 1 de R marca la transacción primero como (RESPONSIBLE,TO_BE_NOTIFIED), luego llama a `confirrmReception` y finalmente cambia la transacción al estado (RESPONSIBLE,RECEPTION_NOTIFIED). Esto permitiría eliminar el agente 2 dado que de todas formas el protocolo está preparado para recibir varias veces la misma transacción (si es que llega a darse que se cae el equipo antes de confirmar la transacción o entre la confirmación y la persistencia en la base de datos (de R) de la confirmación). +
+La optimización trae dos defectos leves:
 
-El otro problema consiste en que cuando el plug-in Incoming Crypto recibe un evento, debe tomar el origen del evento y usar la referencia del módulo correspondiente (ejemplo: bitcoin de la crypto network o blockchaininfo de world). Actualmente, por lo que entiendo esto se hace implementando una interfaz DealsWith por cada plug-in sobre el que se tiene que hacer referencia (ver nota de más abajo), pero esto no es apropiado para este caso porque implica que al agregar por ejemplo un módulo para la red litecoin en crypto network tendría que modificar esta capa para agregar las referencias. Por otro lado (e independientemente de si use uno o varios DealsWith) la referencia debe existir porque inevitablemente se debe interactuar con los plug-ins que reciben las transacciones.
+* Uno semántico es que temporalmente ambos módulos (R y T) tendrán la misma transacción con el estado RESPONSABLE, en cuyo caso podríamos asumir que ambos son responsables de esa transacción (como dijimos antes, esto no tiene problemas de implementación).
+* El segundo tiene relación con el <<Fermat-DMP-CryptoTransactionLayer-TransactionTransferProtocol-SBDProtocol,protocolo SBD>>, el cual debería considear nuevos estados para las transacciones y estados de notificación. Pero obviamente puede implementarse.
 
-NOTE: Quizás se pueda usar un solo DealsWith sobre una interfaz que en este caso es común a todos los módulos, sería la interfaz con los dos métodos de T que se describen, pero hay que analizar si la información de las transacciones es uniforme con todas las redes crypto. De todas formas, esto no resolvería el problema porque seguiría requiriendo referencias a los nuevos módulos que implementen esta interfaz.
+A mí ambos me parecen entendibles, pero yo soy el que lo está haciendo y lo que me interesa es que sea entendible a otros que puedan llegar a tener que tocar el código. +
+Por otro lado tengo más plug-ins qué pensar así que tampoco quiero seguir dándole tanto tiempo a este tema si es que tenemos prioridad por hacer algo rápido. Voy a dejar la versión que explico aqui y paso a lo demás. Si vemos que hay tiempo lo mejoramos. +
 
-Este problema lo veo repetido en varios lados, por ejemplo:
+=== Eventos (ESTO SE VA A MOVER A LA DOCUMENTACIÓN DEL PLUG-IN INCOMING CRYPTO)
 
-* En la capa de transacciones, dado el tipo de billetera debemos obtener el manejador adecuado para esa billetera
-* También en la capa de transacciones, dado el tipo de red crypto necesitamos obtener una referencia en particular (en este caso el problema es más amplio porque puedo requerir las cosas de World, pero podría enviar en los eventos la capa de la que proviene el source además del identificador del mismo)
-* En las nich wallet type, dado un tipo de transacción debemos obtener el manejador adecuado según el destino de la transacción (outgoing intra user, outgoing extra user)
-* Creo que he visto este problema también cuando dado el tipo de usuario debemos obtener el manejador adecuado para ese usuario
+Necesitamos hacer que el incoming crypto implemente un puente del protocolo SBP con un evento especial para avisarle a los incoming crypto especializados que le pidan transacciones nuevas. +
+Por lo que veo hay que hacer que el método `getPendingTransactions` tome un parámetro que diga qué destino tienen las transacciones. Así quién recibió el evento se lleva las que les corresponde y no las de otros.
 
-Es posible (esto es sólo una idea) de que los componentes que realizan esa tarea (darte la referencia a la interfaz que uno busca en función al identificador del plug-in) deba incorporarse como una función de capa (o de un plug-in especial dentro de la capa). Así podríamos desacoplar mejor las cosas (al menos en esta capa). Si recibo un evento, busco la capa de la fuente (esta información debería venir en el evento) y le pido que me pase el manejador del plug-in que busco de esa capa (o plug-in especial dentro de esa capa), así si incorporan una nueva red crypto por ejemplo no tendré que cambiar nada en la capa de transacciones porque obtengo las referencias dinámicamente a medida que las necesito en lugar de obtenerlas todas juntas al momento de inicialización de la plataforma. 
+Para los estados de las crypto noté que hay eventos especializados como
+
+* IncomingCryptoIdentifiedFromIntraUserEvent
+* IncomingCryptoIdentifiedFromExtraUserEvent
+* ...
+
+Así que para notificar traspasos tal vez podmos crear eventos
+
+* TransactionsWaitingTransferenceIntraUserEvent
+* TransactionsWaitingTransferenceExtraUserEvent
+* Habría que tener uno para DeviceUser? (A FUTURO)
 
 == Plug-ins in this layer
 
