@@ -23,27 +23,29 @@ In the next section we will explore a general idea behind the protocols and fail
 == Transaction Data Structure
 
 To attack the problems we deal with in this layer we will need to design a few data structures to contain and share important information. +
-To simplify the analysis let's give a name to the data strcutures that contains the value and information associated to the fermat transaction. We will call them ValueContainer and MetaValueContainer respectively. +
+To simplify the analysis let's give a name to the data strcutures that contains the value and information associated to the fermat transaction. We will call them TransactionInformation and MetaTransactionInformation respectively. +
 
-As we will get the value and meta-value separetely and in no predictable order we will to introduce in the MetaValueContainer a reference to the associated ValueContainer. In this way we will be able to know when we have all the information needed to reflect the transaction in the wallets among other components. +
+As we will get the value and meta-value separetely and in no predictable order we will introduce in the MetaTransactionInformation a reference to the associated TransactionInformation. In this way we will be able to know when we have all the information needed to reflect the transaction in the wallets among other components. +
 
-The ValueContainer will store.
+The TransactionInformation will store.
 
-.ValueContainer Information
-. The crypto currency we are dealing with as value.
-. The amount of crypto currency. 
-. A transaction identifier that distinguish the crypto transaction.
-. The source crypto address of the transaction.
-. The destination crypto address of the transaction.
-. The timestamp that stablish the creation time of the transaction.
+* The crypto currency we are dealing with as value.
+* The amount of crypto currency. 
+* A transaction identifier that distinguish the crypto transaction.
+* The source crypto address of the transaction.
+* The destination crypto address of the transaction.
+* The timestamp that stablish the creation time of the transaction.
 
-Note: In a single crypto transaction could be bundled many meta transactions.
+NOTE: In a single crypto transaction could be bundled many meta transactions. (Think for the future)
 
-.MetaValueContainer Information
+The MetaTransactionInformation will store:
+
 . The asset represented by the transaction (fiat currency, bonds, etc)
 . A representation of relevant information associated to the asset, e.g. in fiat currency would be the amount of currency involved.
-. The transaction identifier of the associated ValueContainer.
-. The timestamp that stablish the creation time of the transaction. For a simple secutiry mechanism we will ask for this timestamp to be the same timestamp present in the associated ValueContainer.
+. The transaction identifier of the associated TransactionInformation.
+. The timestamp that stablish the creation time of the transaction. 
+
+NOTE: We could consider as a simple secutiry mechanism to ask for this timestamp to be the same timestamp present in the associated TransactionInformation.
 
 This cointainers descriptions are a draft presentation. We will add some fields to them to attack the syncronization problems. +
 
@@ -62,24 +64,26 @@ Debemos considerar algunas cosas:
 . T puede realizar otras acciones previas a inicar el traspaso de la transación.
 . R puede realizar alguna tarea tras recibir la transacción.
 
-Para tener esto en cuanta en los pasos del protocolo, a cada transacción se le agregará un estado de la transacción y un estado de notificación, que notaremos (ESTADO_DE_TRANSACCIÓN, ESTADO_DE_NOTIFICACIÓN). +
+Para tener esto en cuanta en los pasos del protocolo, a cada transacción se le agregará un estado de la transacción y un estado de notificación, que notaremos como un par (ESTADO_DE_TRANSACCIÓN, ESTADO_DE_NOTIFICACIÓN). +
 
 * El estado de la transacción podrá ser: ACKNOWLEDGED, RESPONSIBLE, DELIVERED o APPLIED.
 * El estado de la notificación será NO_ACTION_REQUIRED, TO_BE_NOTIFIED o NOTIFIED. 
 
-El significado y use de cada estado se explicará a continuación junto con el protocolo.
+El significado y uso de cada estado se explicará a continuación junto con el protocolo.
 
 NOTE: Cuando digamos que T recibe/registra una transacción nueva, nos referimos a que tiene una nueva transacción que procesar.
 
 .Pasos del protocolo
 . T registra una transacción nueva que debe procesar, entonces la guarda en su base de datos interna con el par de estados (RESPONSIBLE, NO_ACTION_REQUIRED). 
 . Cuando T (siguiendo su lógica interna) concluye que debe enviar transacciones que están en el estado (RESPONSIBLE,NO_ACTION_REQUIRED) a otro módulo (que será de tipo R), pasa a estas transacciones al estado   (RESPONSIBLE, TO_BE_NOTIFIED).
-. T controla si tiene transacciones en la combinación (RESPONSIBLE,TO_BE_NOTIFIED). 
-** Si tiene transacciones en estado (RESPONSIBLE, TO_BE_NOTIFIED) o (RESPONSIBLE, NOTIFIED), envía el evento TransactionsWaitingTransferenceEvent, para que un módulo responsable se haga cargo y *luego de envíar el evento* pasa las transacciones del estado (RESPONSIBLE,TO_BE_NOTIFIED) al estado (RESPONSIBLE, NOTIFIED). 
+. Periódicamente T revisa si tiene transacciones en la combinación (RESPONSIBLE,TO_BE_NOTIFIED) o (RESPONSIBLE, NOTIFIED). 
+** Si tiene transacciones en alguno de esos pares de estados, envía el evento TransactionsWaitingTransferenceEvent, para que un módulo responsable se haga cargo y *luego de envíar el evento* pasa las transacciones del estado (RESPONSIBLE,TO_BE_NOTIFIED) al estado (RESPONSIBLE, NOTIFIED), las que ya estaban en NOTIFIED no cambian su estado. 
 ** Si no tiene transacciones en ese estado sigue con el análisis del resto de las transacciones.
-. R escucha el evento que lanzó T, mira que el origen del evento es T y llama a un método de la interfaz de T que retorna una lista con todas las transacciones que tiene guardadas en estado (RESPONSIBLE, NOTIFIED). **T no cambia el estado de las transacciones que tiene almacenadas cuando R hace esta consulta.**
+. Por otro lado, cuando R escucha el evento que lanzó T, mira que el origen del evento es T y llama a un método de la interfaz de T que retorna una lista con todas las transacciones que tiene guardadas en estado (RESPONSIBLE, NOTIFIED). **T no cambia el estado de las transacciones que tiene almacenadas cuando R hace esta consulta.**
 . R toma la lista y almacena en una base de datos interna cada transacción de a una a la vez con el estado (ACKNOWLEDGED, TO_BE_NOTIFIED). 
-. Luego, para cada transacción en estado (ACKNOWLEDGED, TO_BE_NOTIFIED) en su base de datos, R llama a otro método de T al cual le pasa el ID de la transacción. La ejecución de este método marca en la base de datos de T a dicha transacción como (DELIVERED, NO_ACTION_REQUIRED). *Luego de esa llamada al método de T*, R marca la transacción en estado (RESPONSIBLE, NOTIFIED). El motivo por el cual primero se notifica y luego se confirma se hace para garantizar que la transacción fue correctamente confirmada por T antes de marcar que lo fue en la base de datos de R.
+. Luego, para cada transacción en estado (ACKNOWLEDGED, TO_BE_NOTIFIED) en su base de datos, R llama a otro método de T al cual le pasa el ID de la transacción. La ejecución de este método marca en la base de datos *de T* a dicha transacción como (DELIVERED, NOTIFIED). *Luego de esa llamada al método de T*, *R* marca la transacción en estado (RESPONSIBLE, NOTIFIED). 
+
+NOTE: El motivo por el cual primero se notifica y luego se confirma se hace para garantizar que la transacción fue correctamente confirmada por T antes de marcar que lo fue en la base de datos de R.
 
 Aquí termina el protocolo de traspaso simple, pero podemos considerar un paso extra para contemplar la acción que realiza R sobre las transacciones recibidas. 
 
@@ -87,16 +91,25 @@ Aquí termina el protocolo de traspaso simple, pero podemos considerar un paso e
 . R toma las transacciones en estado (RESPONSIBLE, NOTIFIED) y realiza su tarea. *Luego de aplcar la tarea* las pasa a (APPLIED, NOTIFIED)
 
 .NOTAS DEL PROTOCOLO
-* Cuando se involucra sólo a dos módulos (uno de tipo R y otro T), este protocolo se implementa con 3 agentes en R y dos en T.
-** El main thread de R es quien recibe los eventos de T y los registra en una base de datos interna.
-** El primer agente lee los eventos de esta base de datos que llena el main thread, va a buscar la lista de transacciones a T y las guarda una por una en otra tabla de la base de datos con el estado (ACKNOWLEDGED, TO_BE_NOTIFIED).
-** El segundo agente mira la tabla que llena el agente anterior con transacciones nuevas y le informa a T que recibió correctamente las transacciones de a una a la vez. Entonces, *tras confirmarle a T la recepción* pasa la misma al estado (RESPONSIBLE, NOTIFIED).
-** El tercer agente aplica la tarea de R sobre las transacciones (RESPONSIBLE, NOTIFIED) y las pasa al estado (APPLIED, NO_ACTION_REQUIRED).
+* Dado que mencionamos dos métodos de T, podemos definir una interfaz llamada TransactionsSender que los identifique. 
+** `List<TransactionInformation> getPendingTransactions()` para obtener la lista de transacciones a traspazar
+** `void confirmReception(TransactionID x)` para comunicar la recepción de una transacción.
+
+NOTE: La clase TransactionInformation 
+
+* Cuando se involucra sólo a dos módulos (uno de tipo R y otro T), este protocolo se implementa con tres agentes en T y otros tres en R.
+** El main thread de T es quien implementa la interfaz de transacciones de T (los métodos.
 ** En primer agente de T es quien monitorea la aparición de nuevas transacciones y las escribe en una tabla con el estado (RESPONSIBLE, NO_ACTION_INTENDED).
 ** El segundo agente mira esa tabla, ejecuta una lógica interna y cuando determina que deben traspasarse las transacciones a otro módulo pasa las transacciones correspondientes del estado (RESPONSIBLE, NO_ACTION_INTENDED) a (RESPONSIBLE, TO_BE_NOTIFIED)
-** El tercer agente es quien se despierta periódicamente, lee las transacciones en estado (RESPONSIBLE, TO_BE_NOTIFIED) o (RESPONSIBLE, NOTIFIED) y envía el evento TransactionsWaitingTransferenceEvent y marca las que eran TO_BE_NOTIFIED como (RESPONSIBLE, NOTIFIED). *Notar que sigue en estado RESPONSIBLE*.
+** El tercer agente es quien se despierta periódicamente, y cuando encuentra transacciones en estado (RESPONSIBLE, TO_BE_NOTIFIED) o (RESPONSIBLE, NOTIFIED) envía el evento TransactionsWaitingTransferenceEvent y marca las que eran TO_BE_NOTIFIED como (RESPONSIBLE, NOTIFIED). *Notar que sigue en estado RESPONSIBLE*.
+** El main thread de R es quien recibe los eventos de T y los registra en una base de datos interna.
+** El primer agente lee los eventos de esta base de datos que llena el main thread, va a buscar la lista de transacciones a T y las guarda una por una en otra tabla de la base de datos con el estado (ACKNOWLEDGED, TO_BE_NOTIFIED).
+** El segundo agente mira la tabla que llena el agente anterior con transacciones nuevas y le informa a T que recibió correctamente las transacciones de a una a la vez (a través del método `confirmReception`). Entonces, *tras confirmarle a T la recepción* pasa la misma al estado (RESPONSIBLE, NOTIFIED).
+** El tercer agente aplica la tarea de R sobre las transacciones (RESPONSIBLE, NOTIFIED) y las pasa al estado (APPLIED, NO_ACTION_REQUIRED).
 
-NOTE: La separación entre el agente 1 y el agente 2 de R es necesaria porque si se notoficara que llegó una transacción antes de marcarla como (ACKNOWLEDGED, TO_BE_NOTIFIED) y luego se callera el sistema, la transacción no se habría registrado y el emisor la tendría marcada como notificada.
+NOTE: La separación entre el agente 1 y el agente 2 de R es necesaria porque si se notoficara que llegó una transacción antes de marcarla como (ACKNOWLEDGED, TO_BE_NOTIFIED) y luego se apagara el sistema, la transacción no se habría registrado y el emisor la tendría marcada como notificada. 
+
+IMPORTANT: TODO: ME PARECE QUE SE PEDEN INVERTIR PERSISTIENDO PRIMERO Y LLAMÁNDO AL MÉTODO DESPUÉS DADO QUE DE TODAS FORMAS ESTAMOS PREPARADOS PARA QUE NOS MANDEN LA MISMA TRASACCIÓN MÁS DE UNA VEZ.
 
 * <<Fermat-DMP-CryptoTransactionLayer-TransactionTransferProtocol-SBDProtocol,Más adelante>> hablaremos del caso de una comunicación que involucra tres módulos, uno de tipo T (emisor original), uno de tipo R (receptor final) y un módulo intermedio que actúa como tipo R para el emisor original y como tipo T para el receptor final (un puente).
 * Al iniciarse un módulo de tipo R, deberá consultar si sus módulos T asociados tienen transacciones acumuladas. Esto se debe a que el módulo pudo inicializarse tras haber perdido varias notificaciones de transacciones nuevas.
@@ -105,7 +118,9 @@ El primer thread de R recibirá ese evento, y luego el segundo thread probableme
 Esto da lugar a que se intente guardar en la base de datos una transacción ya almacenada, dicho caso no deberá considerarse como un error y simplemente deberá ser ignorado. +
 * Por otro lado T debe estar preparado para el aviso de que se desea notificar que una transacción se procesó más de una vez. Esto puede darse en el caso en que el tercer thread de R notificó la recepción pero no llegó a persistir en su base de datos el cambio de estado a NOTIFIED, T ignorará el aviso y si todo es correcto esta vez R sí podrá marcar la transacción como NOTIFIED.
 
-NOTA PARA EZEQUIEL: Hasta acá todo bien en general. Lo unico que yo ajustaría sería la nomenclatura para que se alinie aun mas con la forma en que lo explicamos oralmente. Y ahí vuelvo al concepto de la responsabilidad de cada módulo. 
+== NOTAS PARA EZEQUIEL (DE LUIS)
+
+Hasta acá todo bien en general. Lo unico que yo ajustaría sería la nomenclatura para que se alinie aun mas con la forma en que lo explicamos oralmente. Y ahí vuelvo al concepto de la responsabilidad de cada módulo. 
 
 En las crypto networks o billeteras externas, las transacciones debieras tener estos estados:
 
