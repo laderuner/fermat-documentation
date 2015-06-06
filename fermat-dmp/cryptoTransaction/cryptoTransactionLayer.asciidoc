@@ -87,7 +87,7 @@ NOTE: El motivo por el cual primero se notifica y luego se confirma se hace para
 
 Aquí termina el protocolo de traspaso simple, pero podemos considerar un paso extra para contemplar la acción que realiza R sobre las transacciones recibidas. 
 
-[start=6]
+[start=7]
 . R toma las transacciones en estado (RESPONSIBLE, RECEPTION_NOTIFIED) y realiza su tarea. *Luego de aplcar la tarea* las pasa a (APPLIED, RECEPTION_NOTIFIED)
 
 .NOTAS DEL PROTOCOLO
@@ -150,7 +150,7 @@ Al esperar que estén en NOTIFIED en lugar de TO_BE_NOTIFIED se garantiza que el
 
 Revisemos los pasos, el pasaje de las transacciones de S a B es el protocolo normal para mandar de un T a un R. +
 Así que tenemos que B tiene transacciones después del paso 5 del protocolo. Es decir, con el estado (RESPONSIBLE, RECEPTION_NOTIFIED). +
-Aquí el paso 6 será que el tercer agente de B decide a quién debe enviar algunas transacciones, las pasa al estado (RESPONSIBLE, TO_BE_NOTIFIED)  (combinación de estados que no se da en el protocolo simple) y marca de alguna manera el evento a lanzar según el análisis realizado. 
+Aquí el paso 7 será que el tercer agente de B decide a quién debe enviar algunas transacciones, las pasa al estado (RESPONSIBLE, TO_BE_NOTIFIED)  (combinación de estados que no se da en el protocolo simple) y marca de alguna manera el evento a lanzar según el análisis realizado. 
 Un cuarto agente controlará periódicamente si hay transacciones en este estado (RESPONSIBLE, TO_BE_NOTIFIED), lanzará el evento que indicó el thread anterior y pasará la transacción a (RESPONSIBLE, SENDING_NOTIFIED). +
 La implementación del método `confirmReception` de B pasará las transacciones de (RESPONSIBLE, SENDING_NOTIFIED) a
 (DELIVERED, SENDING_NOTIFIED) cerrando la participación de B.
@@ -188,15 +188,26 @@ Estos protocolos serán implementado por diversos plug-ins que interactúan con 
 
 == Problemas a resolver
 
+=== Analizar livelocks
+
+Ejemplo:
+
+* El tercer agente de T encuentra transacciones en estado (RESPONSIBLE, TO_BE_NOTIFIED) y envía el evento TransactionsWaitingTransferenceEvent. Antes de que actualice la transacción al estado (RESPONSIBLE, SENDING_NOTIFIED) el agente de R se lleva la transacción, la registra y confirma su recepción. Esto lleva a que el estado cambie a (DELIVERED,RECEPTION_CONFIRMED). Finalmente este agente ejecuta la actualización en su thread y escribe el estado de notificación SENDING_NOTIFIED. 
+Aquí dependemos de la implementación que se haya hecho en el plug-in de databaseManager:
+** Si se actualizan todos los campos tendremos el estado final (RESPONSIBLE, SENDING_NOTIFIED) y la transacción pasará a ser enviada de nuevo. Para resolver eso deberíamos hacer que los módulos R al recibir varias veces una transacción, no lancen un error pero sí deben llamar de nuevo al método de notificación.
+** Si se actualiza sólo el campo modificado del record se obtendría el estado final (DELIVERED,SENDING_NOTIFIED), lo cual no es del todo un problema pero demuestra que algo simple como esto parece tiene muchos detalles acarreados por la concurrencia.
+
 === Simplicidad
 
 Tengo la impresión de que esto anda y que la explicación es entendible y será fácil de entender la implementación tras leer esto. La duda que tengo es que es muy evidente que puedo fusionar algunos threads. Por ejemplo, podría optimizarse la implementación si el agente 1 de R marca la transacción primero como (RESPONSIBLE,TO_BE_NOTIFIED), luego llama a `confirrmReception` y finalmente cambia la transacción al estado (RESPONSIBLE,RECEPTION_NOTIFIED). Esto permitiría eliminar el agente 2 dado que de todas formas el protocolo está preparado para recibir varias veces la misma transacción (si es que llega a darse que se cae el equipo antes de confirmar la transacción o entre la confirmación y la persistencia en la base de datos (de R) de la confirmación). +
 La optimización trae dos defectos leves:
 
-* Uno semántico es que temporalmente ambos módulos (R y T) tendrán la misma transacción con el estado RESPONSABLE, en cuyo caso podríamos asumir que ambos son responsables de esa transacción (como dijimos antes, esto no tiene problemas de implementación).
+* Uno semántico es que temporalmente ambos módulos (R y T) tendrán la misma transacción con el estado RESPONSIBLE, en cuyo caso podríamos asumir que ambos son responsables de esa transacción (como dijimos antes, esto no tiene problemas de implementación).
 * El segundo tiene relación con el <<Fermat-DMP-CryptoTransactionLayer-TransactionTransferProtocol-SBDProtocol,protocolo SBD>>, el cual debería considear nuevos estados para las transacciones y estados de notificación. Pero obviamente puede implementarse.
 
-A mí ambos me parecen entendibles, pero yo soy el que lo está haciendo y lo que me interesa es que sea entendible a otros que puedan llegar a tener que tocar el código. +
+Habría que ver el análisis fino, si vemos la sección anterior se encuantran posibles trazas que podrían generar problemas. Fusionar threads reduce la concurrencia pero les da más tareas a un mismo thread por lo que las acciones que realiza pueden ser más complejas de analizar.
+
+A mí ambos planteos (el descripto y uno tras optimizar un poco fusionando threads) me parece que serían entendibles, pero yo soy el que lo está haciendo y lo que me interesa es que sea entendible a otros que puedan llegar a tener que tocar el código. +
 Por otro lado tengo más plug-ins qué pensar así que tampoco quiero seguir dándole tanto tiempo a este tema si es que tenemos prioridad por hacer algo rápido. Voy a dejar la versión que explico aqui y paso a lo demás. Si vemos que hay tiempo lo mejoramos. +
 
 === Eventos (ESTO SE VA A MOVER A LA DOCUMENTACIÓN DEL PLUG-IN INCOMING CRYPTO)
