@@ -1,0 +1,45 @@
+= Transaction Transference Protocol - Version 2
+
+Date: May 6th 2015 +
+Author: Ezequiel Postan <ezequiel_postan@hotmail.com>
+
+== Probelmas de la versión 1
+
+* El principal problema es que la aplicación que se le va a dar a este protocolo requiere que se envíe más de una vez la misma transacción, sólo que lo hará en distintos estados. +
+Esto se ve por ejemplo cuando una crypto network detecta una nueva transacción, esta capa nos mandará para la misma transacción al menos tres eventos (Identified, Received, Confirmed). +
+El mecanismo de eventos nos prohibe enviar la información de las transacciones en el mismo, por ende desde el IncomingCrypto tendremos que ir a buscar las transacciones y adquirirlas con el protocolo de traspaso. +
+Siguiendo el protocolo de la versión 1 cuando retiramos una transacción en Identified, la marcaremos como recibida al confirmar recepción. Podríamos hacer que el emisor actualice los estados cuando llegue al estado Received, pero esto traería problemas si por una demora la transacción pasa a received antes de que confirmen la recepción del identified. +
+
+* También querríamos poder tener múltiples receptores en el futuro.
+* Problema "menor", podría ser más eficiente
+
+== Propuestas de solución
+
+. Una solución para el problema 1 es que por cada vez que debamos notoficar una transacción generemos un identificador que podemos llamar TransactionTicket. +
+Así que para cada envío que se deba hacer se genera un TransactionTicket. Además podemos cambiar el parámetro de `confirmReception` para que sea el TransactionTicket y no el ID de la transacción por lo que podremos mantener las notificaciones de los diferentes estados como si fueran comunicaciones separadas. +
+. Pensemos en el segundo problema, en principio no veo solución dado que planteado en limpio lo que buscaríamos es que, sin saber a cuantas personas debe llegar cierta información debemos garantizar que les va a llegar a todos. A priori esto no tiene solución, lo normal sería intentar poner nuestro mejor esfuerzo.
+.. Esto podría ser reiniciar el proceso de traspazo cada vez que terminemos de mandarle la información a otro módulo y "rezar" porque el fairness del scheduler haga que las cosas les llega a todos. Obiamente esto es inaplicable, por un lado es tremendamente ineficiente dado que siempre se está mandando información ya enviada incluso luego de que todos los receptores la recibieron. Por otro lado podría haber starvation de un receptor de todas formas. Po seguridad ni siquiera podríamos poner información en el evento que ayude a lidear con el problema.
+.. Otra idea para tratar este problema podría ser relajar las restricciones. Si colocamos el número de receptores de la información
+
+. El tercer problema lo veremos mientras describimos el protocolo.
+
+
+NOTE: Tabla LastStateSeen (usar ints)
+
+Comencemos nuevamente con un módulo tipo R y uno tipo T.
+
+La interfaz TransactionSender de T brinda:
+
+```
+  void confirmReception(TransactionTicket transactionTicket)
+  List<TransactionInformation> getPendingTransactions(ReceptorType receptorType, TransactionDescription description)
+```
+
+donde `receptorType` indicará el tipo de receptor al que se le puede entregar la transacción y `descriprion` será la descripción del tipo de transacciones que debe usarse. Ambos serán enums que encapsulan un string.
+
+Para plantear claridad hablaremos de los cuatro eventos de las crypto currencies (Identified, Received, Confirmed, Reversed) y hablaremos del estado de una transacción como la terna (CRYPTO_ESTADO, ESTADO_DE_LA_TRANSACTIÓN, ESTADO_DE_NOTIFICACIÓN)
+
+. El monitor agent de T despierta, detecta una nueva transacción o un cambio de estado de una transacción que ya tiene le genera un TransactionTicket y la marca.
+** Si recién la identifica genera un TransactionTicket y la marca como (IDENTIFIED, RESPONSIBLE, TO_BE_NOTIFIED).  *después* de anunciar el evento pasa la transacción al estado (IDENTIFIED,RESPONSIBLE,SENDING_NOTIFIED).
+. T manda el evento Identified si tiene transacciones en estado (RESPONSIBLE,SENDING_NOTIFIED).
+para notificar que hay transacciones nuevas y marca las que están en 
