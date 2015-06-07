@@ -151,6 +151,10 @@ Aquí dependemos de la implementación que se haya hecho en el plug-in de databa
 ** Si se actualizan todos los campos tendremos el estado final (RESPONSIBLE, SENDING_NOTIFIED) y la transacción pasará a ser enviada de nuevo. Para resolver eso deberíamos hacer que los módulos R al recibir varias veces una transacción, no lancen un error pero sí deben llamar de nuevo al método de notificación.
 ** Si se actualiza sólo el campo modificado del record se obtendría el estado final (DELIVERED,SENDING_NOTIFIED), lo cual no es del todo un problema pero demuestra que algo simple como esto parece tiene muchos detalles acarreados por la concurrencia.
 
+=== No aplicable
+
+Si bien este es un buen inicio, no soluciona el problema. En la versión 2 refinamos las cosas para que se pueda adaptar mejor a cambios.
+
 === Simplicidad
 
 Tengo la impresión de que esto anda y que la explicación es entendible y será fácil de entender la implementación tras leer esto. La duda que tengo es que es muy evidente que puedo fusionar algunos threads. Por ejemplo, podría optimizarse la implementación si el agente 1 de R marca la transacción primero como (RESPONSIBLE,TO_BE_NOTIFIED), luego llama a `confirrmReception` y finalmente cambia la transacción al estado (RESPONSIBLE,RECEPTION_NOTIFIED). Esto permitiría eliminar el agente 2 dado que de todas formas el protocolo está preparado para recibir varias veces la misma transacción (si es que llega a darse que se cae el equipo antes de confirmar la transacción o entre la confirmación y la persistencia en la base de datos (de R) de la confirmación). +
@@ -160,9 +164,6 @@ La optimización trae dos defectos leves:
 * El segundo tiene relación con el <<Fermat-DMP-CryptoTransactionLayer-TransactionTransferProtocol-SBDProtocol,protocolo SBD>>, el cual debería considear nuevos estados para las transacciones y estados de notificación. Pero obviamente puede implementarse.
 
 Habría que ver el análisis fino, si vemos la sección anterior se encuantran posibles trazas que podrían generar problemas. Fusionar threads reduce la concurrencia pero les da más tareas a un mismo thread por lo que las acciones que realiza pueden ser más complejas de analizar.
-
-A mí ambos planteos (el descripto y uno tras optimizar un poco fusionando threads) me parece que serían entendibles, pero yo soy el que lo está haciendo y lo que me interesa es que sea entendible a otros que puedan llegar a tener que tocar el código. +
-Por otro lado tengo más plug-ins qué pensar así que tampoco quiero seguir dándole tanto tiempo a este tema si es que tenemos prioridad por hacer algo rápido. Voy a dejar la versión que explico aqui y paso a lo demás. Si vemos que hay tiempo lo mejoramos. +
 
 === Eventos (ESTO SE VA A MOVER A LA DOCUMENTACIÓN DEL PLUG-IN INCOMING CRYPTO)
 
@@ -175,9 +176,5 @@ Para los estados de las crypto noté que hay eventos especializados como
 * IncomingCryptoIdentifiedFromExtraUserEvent
 * ...
 
-Así que para notificar traspasos tal vez podmos crear eventos
-
-* TransactionsWaitingTransferenceIntraUserEvent
-* TransactionsWaitingTransferenceExtraUserEvent
-* Habría que tener uno para DeviceUser? (A FUTURO)
-
+Por lo que probablemente habrá usaremos dichos eventos. +
+Hay que modificar las cosas para poder mandar y coordinar la comunicación del crypto estado de cada transacción (Identified, received, etc), esto lo veremos en la versión 2 y dejamos esto como guía/borrador de referencia.
