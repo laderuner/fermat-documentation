@@ -43,6 +43,7 @@ Transaction:: Contenedor de datos con la información de una transacción. Estos
 ** Un elemento de tipo CryptoTransaction
 ** Un valor de Action (Apply, Revert)
 ** Un valor de Specialist (en principio los receptores de transacciones crypto pueden ignorar este campo, en cualquier caso para mencionar al incomingcrypto se usa el valor CRYPTO_ROUTER)
+** Un timestamp que coloca quien genera la transaccón. (En este caso la red bitcoin)
 
 TransactionStatus:: Estado interno que guarda un plug-in sobre cadaa transacción que describe su relación con la misma. El estado puede ser:
 ** ACKNOWLEDGE: Cuando recibe una transacción pero aún no confirmó su recepción.
@@ -64,7 +65,9 @@ TransactionSender:: Interfaz que implementan los plug-ins que traspasan transacc
 ```
 
   El método confirmedReception marca la transacción marcada como argumento como (DELIVERED,RECEPTION_NOTIFIED).
-  El método getPendingTransactions retorna la lista de todas las transacciones con ProtocolStatus SENDING_NOTIFIED que tienen como Specialist al pasado como argumento.
+  El método getPendingTransactions retorna la lista de todas las transacciones con ProtocolStatus SENDING_NOTIFIED que tienen como Specialist al pasado como argumento. *No camba el estado de ninguna transacción*
+
+IMPORTANT: Respetar que `getPendingTransactions` retorne sólo lo que está en estado (RESPONSIBLE,SENDING_NOTIFIED). No intentar "optimizar" pasando las transacciones en TO_BE_NOTIFIED porque traería graves problemas de concurrencia.
 
 == Convensiones
 
@@ -73,7 +76,7 @@ TransactionSender:: Interfaz que implementan los plug-ins que traspasan transacc
 
 == Protocolo
 
-Para simplificar la explicación supondemos que el receptor de las transacciones crypto y por ende el emisor original de las transacciones es el plug-in de la red bitcoin. A su vez, usaremos el término 'red bitcoin' para referirnos a este plug-in.
+Para simplificar la explicación supondemos que el receptor de las transacciones crypto y por ende el emisor original de las transacciones es el plug-in de la red bitcoin. A su vez, usaremos el término 'red bitcoin' para referirnos a este plug-in. El plug-in al que traspasa las transacciones la red btcoin será el IncomingCrypto y el plug-in que aplicalas transacciones el el IncomingCryptoExtraUser.
 
 Analicemos los pasos del protocolo de traspaso de transacciones en estos componentes.
 
@@ -83,18 +86,37 @@ Analicemos los pasos del protocolo de traspaso de transacciones en estos compone
 .. Si el crypto estado es IDENTIFIED, no almacena una transacción asociada ya que no debe aplicarse aún.
 . Un agente de la red bitcoin detecta que hay transacciones crypto con ProtocolStatus TO_BE_NOTIFIED o SENDING_NOTIFIED, entonces envía el evento IncomingCryptoTransactionsWaitingTransferenceEvent. Luego de lanzar el evento marca las transacciones que tenía en TO_BE_NOTIFIED como SENDING_NOTIFIED. <<Transaction-Transference-Protocol-v2-Note2,VER NOTA>>
 . El IncomngCrypto regstra el evento.
-. Un agente del IncomingCrypto ve que hay transacciones pendientes y llama al método `getPendingTransactions(CRYPTO_ROUTER)`, luego recorre la lista que devuelve y por cada transacción ejecuta los siguientes pasos *en ese orden*:
-.. Almacena la transacción recibida con estado (ACKNOWLEDGE,TO_BE_NOTIFIED)
+. Un agente del IncomingCrypto ve que hay transacciones pendientes y llama al método `getPendingTransactions(CRYPTO_ROUTER)`, luego recorre la lista que devuelve y *primero guarda en su base de datos* a todas las transacciones con el estado (ACKNOWLEDGE,TO_BE_NOTIFIED). *Luego*, por cada transacción en la base de datos con estad (ACKNOWLEDGE,TO_BE_NOTIFIED) (que pueden ser más que las que guardó recién) ejecuta los siguientes pasos *en ese orden*:
 .. Llama al método `confirmReception` con el TransactionId de la transacción como parámetro
 .. Marca la transacción como (RESPONSIBLE,NO_ACTION_REQUIRED)
 . Un segundo agente de IncomingCrypto analizará las transacciones con estado (RESPONSIBLE,NO_ACTION_REQUIRED). Por cada una de ellas haría los siguientes pasos *en el orden enunciado* 
 .. Deduciría a partir de la información de las mismas su Specialist y lo marcaría. 
 .. Pasaría la transacción al estado (RESPONSIBLE,TO_BE_NOTIFIED)
-.. Cuando termina de recorrer la lista recorre ahora todas las que están con TransactonStatus RESPONSIBLE y ProtocolStatus TO_BE_NOTIFIED o SENDING_NOTIFIED. Registra todos los especialistas que vio en este recoorido y realiza los siguente pasos *en el orden enunciado*:
+.. Cuando termina de recorrer la lista recorre ahora todas las que están con TransactonStatus RESPONSIBLE y ProtocolStatus TO_BE_NOTIFIED o SENDING_NOTIFIED. Registra todos los especialistas que vio en *este recoorido* (no intentar optimizar usando el recorrido anterior porque puede perderse si el sistema se cae) y realiza los siguente pasos *en el orden enunciado*:
 ... Por cada Specialist registrado en el recorrido anterior lanza el evento correspondiente (IncomingCryptTransactionsWaitingTransferenceSpecalistEvent)
 ... Pasa por cada transacción con ProtocolStatus TO_BE_NOTIFIED a SENDING_NOTIFED. <<Transaction-Transference-Protocol-v2-Note3,VER NOTA>>
+. EL incomng crypto extra-user escuchará el evento.
+. Un agente del IncomingCryptoExtraUser ve que hay transacciones pendientes y llama al método `getPendingTransactions(EXTRA_USER)`, luego recorre la lista que devuelve y *primero guarda en su base de datos* a todas las transacciones asignándoles el estado (ACKNOWLEDGE,TO_BE_NOTIFIED). *Luego*, por cada transacción en la base de datos con estad (ACKNOWLEDGE,TO_BE_NOTIFIED) (que pueden ser más que las que guardó recién) ejecuta los siguientes pasos *en ese orden*:
+.. Llama al método `confirmReception` con el TransactionId de la transacción como parámetro, con lo que el IncomingCrypto marcará la transacción que se indique como (DELIVIRED,RECEPTION_NOTIFIED) en la base de datos del IncomingCrypto.
+.. Marca la transacción como (RESPONSIBLE,NO_ACTION_REQUIRED)
+. El segundo agente ve las transacciones que tiene y decide si debe ejecutarlas o no, *luego de ejecutar la transacción* la marca como (APPLIED,NO_ACTION_REQUIRED)
 
-Eventualmente el IncomingCrypto especializado llamará al receptonConfirmed. +
+== Consideraciones
+
+El protocolo debe estar preparado para la caída del dispostvo en cualquier paso, por ende las siguientes implementaciones son necesarias.
+
+* Si un emisor envía el vento para que retiren transacciones y el receptor las retira, almacena, pero el sistema cae antes que pueda confirmarl su receptión termnaremos con este estado:
+** El receptor tendrá transacciones en su base de datos en (ACKNOWLEDGED,TO_BE_NOTIFIED) 
+** El emisor no sabrá que el receptor ya las retiró. Recordar que el receptor sólo retra lo que está en (RESPONSIBLE,SENDING_NOTIFIED).
+
+Por ende cuando se levante el sistema, el receptor volverá a pedir transacciones pendientes y recibirá en la lista transacciones que ya tiene. Cuando esto ocurra, el receptor simplemente ignorará la excepción que lanzará la base de datos por querer introducir algo que ya tenemos y procederá a confirmar la recepción de la transacción para que el emisor la saque de la próxima lista a mandar. 
+
+* Si un receptor llama al `confirmReception` y ants de pasar la transacción de (ACKNOWLEDGED,TO_BE_NOTIFIED) a (RESPONSIBLE,NO_ACTION_REQUIRED) se cae el sistema tendremos la siguiente situación:
+** El emisor tendrá una transaccón confirmada como (DELIVERED,RECEPTION_NOTIFICED) que el receptor aún tendrá como (ACKNOWLEDGED,TO_BE_NOTIFIED). Por ende no se enviaría en la siguiente lista de transacciones al llamar al método `getPendingTransactions`.
+
+Es por esto que el agente que toma la lista de transacciones nuevas, tras registrarlas en su base de datos, vuelve a pedirle a la misma *todas* las transacciones en (ACKNOWLEDGED,TO_BE_NOTIFED). Ya que la que se había confirmado pero no registrado confirmación no estaría en la lista obtenida de `getPendingTransactions`.
+Lo que debemos considerar es entonces que cuando se llame al método `confirmTransacton` más de una vez con la misma transacción, este no lance una excepción sino que simplemente ignore la segunda confirmación para que esta vez el receptor de la transacción pueda pasarla al estado (RESPONSIBLE,NO_ACTION_REQUIRED)
+
 
 [[Transaction-Transference-Protocol-v2-Note1]]
 NOTE: Quiero analizar la posibilidad de cancelar aquí mismo el envío del APPLY de la transacción si aún no se envió, pero es algo tarde cuando escribo esto, voy a verlo al levantarme con mi mente más despierta. A diferencia de la <<Transaction-Transference-Protocol-v2-Note3,últma nota>> aquí no es tan simple, porque el que notifica es otro thread.
