@@ -1,6 +1,6 @@
 = Transaction Transference Protocol - Version 2 (DRAFT)
 
-Date: May 6th 2015 +
+Date: Jun 6th 2015 +
 Author: Ezequiel Postan <ezequiel_postan@hotmail.com>
 
 == Consideraciones
