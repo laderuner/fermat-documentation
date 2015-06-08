@@ -116,3 +116,4 @@ NOTE: Acá hay que analizar de nuevo la posibilidad de cancelar el envió de tra
 * Parece ser más eficiente porque elimina un par de agentes.
 * Creo que los Network Services que transporten información de valor que deba sincronizarse usarían este protocolo con eventos especializados que indiquen nuevas meta-transacciones.
 * Aún hay que revisar esto y completar los pasos con el incoming-crypto-extra-user y ver si incorporar el incoming-crpyo-intra-user no rompe nada
+* Falta analizar el impacto del cambio de usar una transacción crypto por cada meta transacción a pasar a usar una UTXO por cada meta transacción. 
