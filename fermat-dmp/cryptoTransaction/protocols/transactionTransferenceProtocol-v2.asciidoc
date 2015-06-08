@@ -3,57 +3,110 @@
 Date: May 6th 2015 +
 Author: Ezequiel Postan <ezequiel_postan@hotmail.com>
 
+== Consideraciones
+
+* No se puede depender sólo de los eventos informativos IncomingCryptoReceivedEvent e IncomingCryptoReversedEvent porque pueden detectarse transacciones crypto confirmadas sin que haya visto la primer confirmación (porque estaba apagado el equipo por ejemplo). El protocolo de traspaso de transacciones sólo depende de un evento que exige el traspaso de transacciones pendientes, usaresmo el evento IncomingCryptoTransactionsWaitingTransferenceEvent.
+
 == Probelmas de la versión 1
 
-* El principal problema es que la aplicación que se le va a dar a este protocolo requiere que se envíe más de una vez la misma transacción, sólo que lo hará en distintos estados. +
-Esto se ve por ejemplo cuando una crypto network detecta una nueva transacción, esta capa nos mandará para la misma transacción al menos tres eventos (Identified, Received, Confirmed). +
-El mecanismo de eventos nos prohibe enviar la información de las transacciones en el mismo, por ende desde el IncomingCrypto tendremos que ir a buscar las transacciones y adquirirlas con el protocolo de traspaso. +
-Siguiendo el protocolo de la versión 1 cuando retiramos una transacción en Identified, la marcaremos como recibida al confirmar recepción. Podríamos hacer que el emisor actualice los estados cuando llegue al estado Received, pero esto traería problemas si por una demora la transacción pasa a received antes de que confirmen la recepción del identified. +
-
-* También querríamos poder tener múltiples receptores en el futuro.
-* Cómo organizamos las cosas para reutilizar el protocolo para comunicar MetaTransactionInformation proveniente de los network services.
+* No separaba los conceptios de transacción de la red crypto y transacción de la plataforma. Cosa que notaremos más adelante.
+* No plantea cómo organizar las cosas para reutilizar el protocolo para comunicar MetaTransactionInformation provenientes de los network services.
 * Problema "menor", podría ser más eficiente
 
-== Propuestas de solución
 
-. Una solución para el problema 1 es que por cada vez que debamos notoficar una transacción generemos un identificador que podemos llamar TransactionTicket. +
-Así que para cada envío que se deba hacer se genera un TransactionTicket. Además podemos cambiar el parámetro de `confirmReception` para que sea el TransactionTicket y no el ID de la transacción por lo que podremos mantener las notificaciones de los diferentes estados como si fueran comunicaciones separadas. +
-Hay que analizar sin embargo la lógica de cómo se comunican los estados. Qué pasa si se desea comunicar un Received y aún no se confirmó el Identified o si se desea enviar el evento Reversed.
-. Pensemos en el segundo problema, en principio no veo solución dado que planteado en limpio lo que buscaríamos es que, sin saber a cuantas personas debe llegar cierta información debemos garantizar que les va a llegar a todos. A priori esto no tiene solución, lo normal sería intentar poner nuestro mejor esfuerzo.
-.. Esto podría ser reiniciar el proceso de traspazo cada vez que terminemos de mandarle la información a otro módulo y "rezar" porque el fairness del scheduler haga que las cosas les llega a todos. Obiamente esto es inaplicable, por un lado es tremendamente ineficiente dado que siempre se está mandando información ya enviada incluso luego de que todos los receptores la recibieron. Por otro lado podría haber starvation de un receptor de todas formas. Po seguridad ni siquiera podríamos poner información en el evento que ayude a lidear con el problema.
-.. Otra idea para tratar este problema podría ser relajar las restricciones. Si colocamos el número de receptores de la información
+== Definiciones preliminares
 
-. El tercer problema lo veremos mientras describimos el protocolo.
+Agente:: Thread que realiza un trabajo en paralelo.
+Transacción crypto:: Mecanismo por el cual una red de crypto currencies registra el traspaso de valor de un usuario a otro.
+Transacción:: Tarea de modificar los estados de las wallets y crypto volt de manera transaccional
+Action:: Enum que lista qué debe hacerse con la transacción crypto que se traspasa. Los valores son:
+** APPLY: Para que se aplique la transacción
+** REVERT: Para revertir la transacción
 
+CryptoState:: Enum que lista los cuatro posbles estados de una transacción crypto. Estos son:
+** IDENTIFIED: Cuando se ve la transacción crypto en la red pero sin ninguna confirmación
+** RECEIVED: Cuando la transacción crypto obtiene la primer confirmación.
+** CONFIRMED: Cuando la tramsacción crypto obtiene suficientes confrmaciones para considerar la transacción irreversble.
+** REVERSED: Cuando se reverte la transacción.
 
-NOTE: Tabla LastStateSeen (usar ints)
+Specialist:: Enum que lista qué tipo de plug-in debe tomar poseción de la transacción a traspazar. Este enum es necesario dado que este plug-in debe dar distintas transacciones a distintos plug-ins, por ende cuando un plug-in venga a tomar posesión de una transacción debe indicar qué tipo de transacciones maneja.
+CryptoTransaction:: Contenedor de datos con la información de una transacción. Esta información es: 
+** Hash de la transacción
+** Dirección de Origen
+** Dirección de Destino
+** Crypto Currency
+** CryptoState
+** Monto
 
-Comencemos nuevamente con un módulo tipo R y uno tipo T.
+Transaction:: Contenedor de datos con la información de una transacción. Estos datos son:
+** Un identificador distintivo (TransactionId)
+** Un elemento de tipo CryptoTransaction
+** Un valor de Action (Apply, Revert)
+** Un valor de Specialist (en principio los receptores de transacciones crypto pueden ignorar este campo, en cualquier caso para mencionar al incomingcrypto se usa el valor CRYPTO_ROUTER)
 
-La interfaz TransactionSender de T brinda:
+TransactionStatus:: Estado interno que guarda un plug-in sobre cadaa transacción que describe su relación con la misma. El estado puede ser:
+** ACKNOWLEDGE: Cuando recibe una transacción pero aún no confirmó su recepción.
+** RESPONSIBLE: Cuando posee la transacción y aún no la aplicó ni la traspasó
+** DELIVERED: Cuando traspasó la transacción a otro plug-in para que este se haga responsable.
+** APPLIED: Cuando aplicó la transacción
+
+ProtocolStatus:: Estado interno que guarda un plug-in sobre cada transacción que describe su situación de traspaso de la misma. Este estado puede ser:
+** NO_ACTION_REQUIRED: Cuando se tiene una transacción pero no se requiere ejecutar ningún traspaso o aplicación aún.
+** TO_BE_NOTIFIED: Cuando se debe notificar un evento para iniciar el traspaso de una transacción.
+** SENDING_NOTIFIED: Cuando se emitió el evento que notifica el pedido de traspaso de la transacción.
+** RECEPTION_NOTIFIED: Cuando se recibe la confirmación de receptión del traspaso de una transacción.
+
+TransactionSender:: Interfaz que implementan los plug-ins que traspasan transacciones a otros módulos, brinda los siguientes métodos:
 
 ```
-  void confirmReception(TransactionTicket transactionTicket)
-  List<TransactionInformation> getPendingTransactions(ReceptorType receptorType, TransactionDescription description)
+  void confirmReception(TransactionId transactionId)
+  List<Transaction> getPendingTransactions(Specialist specialist)
 ```
 
-donde `receptorType` indicará el tipo de receptor al que se le puede entregar la transacción y `descriprion` será la descripción del tipo de transacciones que debe usarse. Ambos serán enums que encapsulan un string.
+  El método confirmedReception marca la transacción marcada como argumento como (DELIVERED,RECEPTION_NOTIFIED).
+  El método getPendingTransactions retorna la lista de todas las transacciones con ProtocolStatus SENDING_NOTIFIED que tienen como Specialist al pasado como argumento.
 
-Para plantear claridad hablaremos de los cuatro eventos de las crypto currencies (Identified, Received, Confirmed, Reversed) y hablaremos del estado de una transacción como la terna (CRYPTO_ESTADO, ESTADO_DE_LA_TRANSACTIÓN, ESTADO_DE_NOTIFICACIÓN)
-También asumimos un orden entre estos estados dado por la siguiente cadena: Identified < Received < Confirmed < Reversed
+== Convensiones
 
-. El monitor agent de T despierta, detecta una nueva transacción o un cambio de estado de una transacción que ya tiene le genera un TransactionTicket y procede:
-** Si recién la identifica la marca como (IDENTIFIED, RESPONSIBLE, TO_BE_NOTIFIED).
-** Si ve que ya tiene la transacción realiza lo siguiente: 
-... Busca entre todos los TransactionTickets que involucran a esta transacción el ticket con el máximo CRYPTO_ESTADO, llamémoslo MaxTick.
-**** Si no hay ninguno (puede que no tengamos un IDENTIFIED porque estábamos dormidos mientras la red bitcoin lo procesó) entonces almacena el ticket como (ESTADO_MODIFICADO, RESPONSIBLE, TO_BE_NOTIFIED).
-**** Si lo hay y el crypto estado es mayor al recién recibido ¿tendríamos un error?
-**** Si lo hay y el crypto estado es igual al recién recibido sería un absurdo porque dijimos que habíamos detectado un cambio.
-**** Si lo hay y el crypto estado es menor al recién recibido entonces el estado a dar depende del estado de MaxTick.
-***** Si el estado de transacción es (DELIVERED,RECEPTION_NOTIFIED) entonces se agrega como (ESTADO_ACTUALIZADO,RESPONSIBLE,TO_Be_ANOUNCED)
-***** En cualquier otro caso se guarda como (ESTADO_ACTUALIZADO,RESPONSIBLE,NO_ACTION_REQUIRED)
+* Escribiremos que una transacción tiene un estado (A,TS,PS) para describir que su Action es A, su TransactionStatus es TS y el ProtocolStatus es PS.
+* Dada una transacción crypto, una transacción asociada es una transacción que tiene como CryptoTransaction un contenedor con los datos de la transacción crypto. Notar que una misma transacción crypto puede tener más de una transacción asociada. Esto se da por ejemplo cuando, al detectar que una transacción es confrmada por primera vez se genera un objeto Transaction con valor de Action `Apply`, y si esta transacción crypto se reversa generará un nuevo objeto transaction pero este tendrá como Action el valor `Revert`
 
-NOTE: ARREGLAR ESTO DE ARRIBA PORQUE ESTÁ MAL
+== Protocolo
 
-. T manda el evento Identified si tiene transacciones en estado (RESPONSIBLE,SENDING_NOTIFIED).
-para notificar que hay transacciones nuevas y marca las que están en 
+Para simplificar la explicación supondemos que el receptor de las transacciones crypto y por ende el emisor original de las transacciones es el plug-in de la red bitcoin. A su vez, usaremos el término 'red bitcoin' para referirnos a este plug-in.
+
+Analicemos los pasos del protocolo de traspaso de transacciones en estos componentes.
+
+. Cuando la red bitcoin despierta, revisa las transacciones *nuevas* que han llegado por la red. Al analizar el crypto estado de cada transacción crypto se tendrá varias opciones:
+.. Si el crypto estado es RECEIVED o CONFIRMED, almacena una transacción asociada con estado (APPLY,RESPONSIBLE,TO_BE_NOTIFIED)
+.. Si el crypto estado es REVERCED, almacena una transacción asociada con estado (REVERT,RESPONSIBLE,TO_BE_NOTIFIED). <<Transaction-Transference-Protocol-v2-Note1,VER NOTA>>
+.. Si el crypto estado es IDENTIFIED, no almacena una transacción asociada ya que no debe aplicarse aún.
+. Un agente de la red bitcoin detecta que hay transacciones crypto con ProtocolStatus TO_BE_NOTIFIED o SENDING_NOTIFIED, entonces envía el evento IncomingCryptoTransactionsWaitingTransferenceEvent. Luego de lanzar el evento marca las transacciones que tenía en TO_BE_NOTIFIED como SENDING_NOTIFIED. <<Transaction-Transference-Protocol-v2-Note2,VER NOTA>>
+. El IncomngCrypto regstra el evento.
+. Un agente del IncomingCrypto ve que hay transacciones pendientes y llama al método `getPendingTransactions(CRYPTO_ROUTER)`, luego recorre la lista que devuelve y por cada transacción ejecuta los siguientes pasos *en ese orden*:
+.. Almacena la transacción recibida con estado (ACKNOWLEDGE,TO_BE_NOTIFIED)
+.. Llama al método `confirmReception` con el TransactionId de la transacción como parámetro
+.. Marca la transacción como (RESPONSIBLE,NO_ACTION_REQUIRED)
+. Un segundo agente de IncomingCrypto analizará las transacciones con estado (RESPONSIBLE,NO_ACTION_REQUIRED). Por cada una de ellas haría los siguientes pasos *en el orden enunciado* 
+.. Deduciría a partir de la información de las mismas su Specialist y lo marcaría. 
+.. Pasaría la transacción al estado (RESPONSIBLE,TO_BE_NOTIFIED)
+.. Cuando termina de recorrer la lista recorre ahora todas las que están con TransactonStatus RESPONSIBLE y ProtocolStatus TO_BE_NOTIFIED o SENDING_NOTIFIED. Registra todos los especialistas que vio en este recoorido y realiza los siguente pasos *en el orden enunciado*:
+... Por cada Specialist registrado en el recorrido anterior lanza el evento correspondiente (IncomingCryptTransactionsWaitingTransferenceSpecalistEvent)
+... Pasa por cada transacción con ProtocolStatus TO_BE_NOTIFIED a SENDING_NOTIFED. <<Transaction-Transference-Protocol-v2-Note3,VER NOTA>>
+
+Eventualmente el IncomingCrypto especializado llamará al receptonConfirmed. +
+
+[[Transaction-Transference-Protocol-v2-Note1]]
+NOTE: Quiero analizar la posibilidad de cancelar aquí mismo el envío del APPLY de la transacción si aún no se envió, pero es algo tarde cuando escribo esto, voy a verlo al levantarme con mi mente más despierta. A diferencia de la <<Transaction-Transference-Protocol-v2-Note3,últma nota>> aquí no es tan simple, porque el que notifica es otro thread.
+
+[[Transaction-Transference-Protocol-v2-Note2]]
+NOTE: DESPUÉS VI ESTO MÁS DESPEJADO Y ME DI CUENTA QUE ESTE PROBLEMA NO SE DA, PORQUE EL MÉRODO `getPrndeingTransactions` NO ENTREGARÍA TRANSACCIONES EN ESTADO TO_BE_NOTFIED, podría ignorarse esta nota, la dejé para recordarlo yo. +
+Esto visto en detalle muestra problemas de concurrencia nuevamente, ejemplo: lanzo el evento y el incoming crypto toma las transaccones, las confirma y cuando luego de confirmarlas es que recíen este agente marca la transaccón al estado SENDING_NOTIFED, aquí dependo de cómo esté implementado el módulo de base de datos para saber si esto puede andar mal (no sólo en si la base de datos usa un lock, sino tambien en cuanto a cómo actualiza un campo). Analizado sin mucho detalle creo que podría causar problemas al incorporar los reversed. Creo que con colocar un lock se podría solucionar. + 
+
+[[Transaction-Transference-Protocol-v2-Note3]]
+NOTE: Acá hay que analizar de nuevo la posibilidad de cancelar el envió de transacciones con acción APPLY si ya tengo registrado el REVERSED. Creo que en este caso puedo cancelar el traspaso si la transaccón tiene ProtocolStatus TO_BE_NOTIFIED.
+
+== Conclusiones hasta aquí
+
+* Si parametrizamos el protocolo haciendo que la interfaz TransactionSender tenga un parámetro de tipo genérico podrámos reutilizar el protocolo con otro tipo de transacciones, simplemente cambiaríamos la clase CryptoTransaction por otro contenedor de datos que usarían el emisor y receptor.
+* Parece ser más eficiente porque elimina un par de agentes.

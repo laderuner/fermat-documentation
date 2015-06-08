@@ -157,6 +157,7 @@ Si bien este es un buen inicio, no soluciona el problema. En la versión 2 refin
 
 === Simplicidad
 
+ESTO DE ABAJO ESTÁ MAL, PORQUE SE MARCA COMO (ACKNOWLEDGE,TO_BE_NOTIFIED) y no como RESPONSIBLE.
 Tengo la impresión de que esto anda y que la explicación es entendible y será fácil de entender la implementación tras leer esto. La duda que tengo es que es muy evidente que puedo fusionar algunos threads. Por ejemplo, podría optimizarse la implementación si el agente 1 de R marca la transacción primero como (RESPONSIBLE,TO_BE_NOTIFIED), luego llama a `confirrmReception` y finalmente cambia la transacción al estado (RESPONSIBLE,RECEPTION_NOTIFIED). Esto permitiría eliminar el agente 2 dado que de todas formas el protocolo está preparado para recibir varias veces la misma transacción (si es que llega a darse que se cae el equipo antes de confirmar la transacción o entre la confirmación y la persistencia en la base de datos (de R) de la confirmación). +
 La optimización trae dos defectos leves:
 

@@ -3,30 +3,28 @@
 
 == Plug-in Description
 
-This is one of the central plug-ins in this layer. It is the one that receives from the other components the notifications about the reception of new value and information that arrive. +
-Network services will give us the information of the incoming transactions and currently the crypto network layer will tell us about the crypto amount (value) that arrive.
+Crypto networks use transactions to send value (crypto currency) from a user to another. We will use the term *crypto transaction* to refer to this kind of transactions. +
+We will use the term *transaction* to refer to the duty of updating balances of wallets and volts to reflect the new value that arrived from the crpto transaction. +
+It is clear that every crypto transaction produce a transaction. +
 
-As mentioned in the <<Fermat-DMP-CryptoTransactionLayer-LayerDescription,layer description>>, we can't assume any order in the arrival of the information, so we will need to design a mechanism of syncronization to coordinate the system actions. +
-When we get both the value and the information related to a transaction we will procede to handle the responsability of refreshing the state of the system to other plug-ins in this layer.
+When new crypto transactions arrive to a wallet of the user logged in the device, one plug-in must update the corresponding wallet and crypto volt balances, i.e. apply the transaction. +
+The plug-in that receive a crypto transaction is responsible of the associated transaction until it applies the said updates or it handles the transaction to another plug-in who knows how to manage it. +
+The plug-ins that receive the crypto transaction (e.g. crypto networks and external wallets supported by the world layer) don't know how to apply the transactions and neither who is responsible of applying them. The purpose of this plug-in is then, to take the responsibility of the transactions from the initial plug-ins, decide what kind of plug-in should handle them and notify them trough an event so he can transfer this more specific plug-ins the responsbility of applying them. +
 
-Let's see an example to examine the problem we are dealing with.
+In other words, this plug-in works as a router. Its purpose is to listen to two events named IncomngCryptoReceivedEvent and IncomingCryptoReversedEvent from diferent sources.
 
-Suppose Alice wants to pay Bob 100 dollars using a fiat over currency wallet. In this system we will transfer the value of the 100 dollars in a crypto currency, say bitcoin. +
-Then, Alice wallet will create a transaction that involve two concepts. One is a bitcoin transaction of an equivalent to the 100 dollars she wants to send. The wallet also needs to inform Bob's wallet that those bitcoins sent represent the 100 dollars sent by Alice. +
-This second piece of information do not travel through the crypto network, instead it  travels through the platform using network services. +
-After Alice sends her transaction, Bob will receive it also devided in the mentioned two channels. This plug-in will be notified by a network service that 100 dollars have been sent from Alice wallet and separetely the bitcoin crypto network will inform this plug-in that a certain amount of bitcoins have arrived to a wallet in his device. +
+* The IncomingCryptoReceivedEvent event informs that new transactions of crypto currency arrived to some wallet of the user logged in the device. +
+* The IncomingCryptoReversedEvent event informs that a transaction that has been notfied has been reversed. +
 
-As we can see, there are many problems involved in this operations:
+Note that an IncomingCryptoReceivedEvent and a IncomingCryptoReversedEvent may be associated to the same crypto transaction but they produce two transactons (one to apply the crypto transaction and one to take back the changes). +
+The plug-in must listen to this events, take the transactions from the source and take the responsability of giving this transactions to specialized plug-ins who know how to handle them. +
 
-. We need a mechanism to relate a crypto transaction with the information provided by a network service.
-. We need to be able to receive the transaction information in any order (first the crypto network valu and then the network service information or vice versa)
-. We need to be prepared to handle long delays and even losses in the information,i.e. we have to be prepare if we receive a crypto amount and not the related information or if we receive the information of a transaction but not the crypto amount.
-
-This plug-in will work with agents (multi thread work) for performance reasons, so we will need to plan carefully the interaction and syncronization mechanisms between threads to avoid concurrency problems.
-
-
+We need to implement a transaction transference protocol described in the <<Fermat-DMP-CryptoTransactionLayer,crypto transaction layer>>, and also a policy to inform the arrival of new transactions, so we will need to design a mechanism of syncronization to coordinate the system actions. +
 
 == NOTAS (TO BE TRANSLATED, EDITED AND DELETED)
+
+
+
 
 Cuando llega el dinero en este sistema distribuido, los dispositivos pueden estar prendidos o no. Además no sabemos si primero llega la información de la transacción o el valor de la misma.
 Cuando llega primero el valor, no queda claro de quién proviene ni qué tipo de usuario lo envió (device,intra,extra user). Por eso este módulo existe, escucha eventos de crypto que llega y su misión es tomar pocesión de la transacción y luego pasársela a uno de los módulos más especializados (incoming-crypto-device, incoming-crypto-i BTC, incoming-crypto-extra).
