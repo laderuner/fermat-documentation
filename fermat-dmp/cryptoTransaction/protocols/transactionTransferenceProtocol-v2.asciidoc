@@ -9,7 +9,7 @@ Author: Ezequiel Postan <ezequiel_postan@hotmail.com>
 
 == Probelmas de la versión 1
 
-* No separaba los conceptios de transacción de la red crypto y transacción de la plataforma. Cosa que notaremos más adelante.
+* No separaba los conceptos de transacción de la red crypto y transacción de la plataforma. Cosa que notaremos más adelante.
 * No plantea cómo organizar las cosas para reutilizar el protocolo para comunicar MetaTransactionInformation provenientes de los network services.
 * Problema "menor", podría ser más eficiente
 
@@ -108,5 +108,11 @@ NOTE: Acá hay que analizar de nuevo la posibilidad de cancelar el envió de tra
 
 == Conclusiones hasta aquí
 
-* Si parametrizamos el protocolo haciendo que la interfaz TransactionSender tenga un parámetro de tipo genérico podrámos reutilizar el protocolo con otro tipo de transacciones, simplemente cambiaríamos la clase CryptoTransaction por otro contenedor de datos que usarían el emisor y receptor.
+* Las consideraciones de cambio que tengo presentes son:
+** Incorporación de nuevos especalistas
+** Los criterios de decisión se podrían encapsular en clases y usar el patrón de diseño strategy. Pero esto no llegué a verlo.
+** Consultas de informacón: Para que se consulte información, se podría tener uno o más métodos que simplemente no cambien ningún estado interno y retornen la información pedida.
+* Si parametrizamos el protocolo haciendo que la interfaz TransactionSender tenga un parámetro de tipo genérico podríamos reutilizar el protocolo con otro tipo de transacciones, simplemente cambiaríamos la clase CryptoTransaction por otro contenedor de datos que usarían el emisor y receptor.
 * Parece ser más eficiente porque elimina un par de agentes.
+* Creo que los Network Services que transporten información de valor que deba sincronizarse usarían este protocolo con eventos especializados que indiquen nuevas meta-transacciones.
+* Aún hay que revisar esto y completar los pasos con el incoming-crypto-extra-user y ver si incorporar el incoming-crpyo-intra-user no rompe nada
