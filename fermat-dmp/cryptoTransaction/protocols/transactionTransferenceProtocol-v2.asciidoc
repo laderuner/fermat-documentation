@@ -65,9 +65,11 @@ TransactionSender:: Interfaz que implementan los plug-ins que traspasan transacc
 ```
 
   El método confirmedReception marca la transacción marcada como argumento como (DELIVERED,RECEPTION_NOTIFIED).
-  El método getPendingTransactions retorna la lista de todas las transacciones con ProtocolStatus SENDING_NOTIFIED que tienen como Specialist al pasado como argumento. *No camba el estado de ninguna transacción*
+  El método getPendingTransactions retorna la lista de todas las transacciones con ProtocolStatus SENDING_NOTIFIED que tienen como Specialist al pasado como argumento. Notar que no camba el estado de ninguna transacción.
 
 IMPORTANT: Respetar que `getPendingTransactions` retorne sólo lo que está en estado (RESPONSIBLE,SENDING_NOTIFIED). No intentar "optimizar" pasando las transacciones en TO_BE_NOTIFIED porque traería graves problemas de concurrencia.
+
+NOTE: Por cuestiones de concurrencia y reutilización de código la interfaz cambiará levemente en la implementación, ver <<Transaction-Transference-Protocol-v2-ImplementationNotes,notas de implementación>>.
 
 == Convensiones
 
@@ -86,20 +88,20 @@ Analicemos los pasos del protocolo de traspaso de transacciones en estos compone
 .. Si el crypto estado es IDENTIFIED, no almacena una transacción asociada ya que no debe aplicarse aún.
 . Un agente de la red bitcoin detecta que hay transacciones crypto con ProtocolStatus TO_BE_NOTIFIED o SENDING_NOTIFIED, entonces envía el evento IncomingCryptoTransactionsWaitingTransferenceEvent. Luego de lanzar el evento marca las transacciones que tenía en TO_BE_NOTIFIED como SENDING_NOTIFIED. <<Transaction-Transference-Protocol-v2-Note2,VER NOTA>>
 . El IncomngCrypto regstra el evento.
-. Un agente del IncomingCrypto ve que hay transacciones pendientes y llama al método `getPendingTransactions(CRYPTO_ROUTER)`, luego recorre la lista que devuelve y *primero guarda en su base de datos* a todas las transacciones con el estado (ACKNOWLEDGE,TO_BE_NOTIFIED). *Luego*, por cada transacción en la base de datos con estad (ACKNOWLEDGE,TO_BE_NOTIFIED) (que pueden ser más que las que guardó recién) ejecuta los siguientes pasos *en ese orden*:
-.. Llama al método `confirmReception` con el TransactionId de la transacción como parámetro
-.. Marca la transacción como (RESPONSIBLE,NO_ACTION_REQUIRED)
-. Un segundo agente de IncomingCrypto analizará las transacciones con estado (RESPONSIBLE,NO_ACTION_REQUIRED). Por cada una de ellas haría los siguientes pasos *en el orden enunciado* 
+. El MonitorAgent (un agente) del IncomingCrypto ve que hay transacciones pendientes y llama al método `getPendingTransactions(CRYPTO_ROUTER)` de la fuente que emitió el evento, luego recorre la lista que devuelve y *primero guarda en su base de datos* a todas las transacciones colocándoles el estado (ACKNOWLEDGE,TO_BE_NOTIFIED). *Luego*, por cada transacción en la base de datos con estado (ACKNOWLEDGE,TO_BE_NOTIFIED) (que pueden ser más que las que guardó recién) ejecuta los siguientes pasos *en ese orden*:
+.. Llama al método `confirmReception` con el TransactionId de la transacción como parámetro.
+.. Marca la transacción como (RESPONSIBLE,NO_ACTION_REQUIRED).
+. El RelayAgent (un segundo agente) del IncomingCrypto analizará las transacciones con estado (RESPONSIBLE,NO_ACTION_REQUIRED). Por cada una de ellas haría los siguientes pasos *en el orden enunciado* 
 .. Deduciría a partir de la información de las mismas su Specialist y lo marcaría. 
 .. Pasaría la transacción al estado (RESPONSIBLE,TO_BE_NOTIFIED)
 .. Cuando termina de recorrer la lista recorre ahora todas las que están con TransactonStatus RESPONSIBLE y ProtocolStatus TO_BE_NOTIFIED o SENDING_NOTIFIED. Registra todos los especialistas que vio en *este recoorido* (no intentar optimizar usando el recorrido anterior porque puede perderse si el sistema se cae) y realiza los siguente pasos *en el orden enunciado*:
-... Por cada Specialist registrado en el recorrido anterior lanza el evento correspondiente (IncomingCryptTransactionsWaitingTransferenceSpecalistEvent)
-... Pasa por cada transacción con ProtocolStatus TO_BE_NOTIFIED a SENDING_NOTIFED. <<Transaction-Transference-Protocol-v2-Note3,VER NOTA>>
+... Por cada Specialist registrado en el recorrido anterior lanza el evento correspondiente (IncomingCryptTransactionsWaitingTransference__**Specalist**__Event)
+... Pasa cada transacción con ProtocolStatus TO_BE_NOTIFIED a SENDING_NOTIFED. <<Transaction-Transference-Protocol-v2-Note3,VER NOTA>>
 . EL incomng crypto extra-user escuchará el evento.
-. Un agente del IncomingCryptoExtraUser ve que hay transacciones pendientes y llama al método `getPendingTransactions(EXTRA_USER)`, luego recorre la lista que devuelve y *primero guarda en su base de datos* a todas las transacciones asignándoles el estado (ACKNOWLEDGE,TO_BE_NOTIFIED). *Luego*, por cada transacción en la base de datos con estad (ACKNOWLEDGE,TO_BE_NOTIFIED) (que pueden ser más que las que guardó recién) ejecuta los siguientes pasos *en ese orden*:
+. El MonitorAgent (un agente) del IncomingCryptoExtraUser ve que hay transacciones pendientes y llama al método `getPendingTransactions(EXTRA_USER)` del IncomingCrypto, luego recorre la lista que devuelve y *primero guarda en su base de datos* a todas las transacciones asignándoles el estado (ACKNOWLEDGE,TO_BE_NOTIFIED). *Luego*, por cada transacción en la base de datos con estad (ACKNOWLEDGE,TO_BE_NOTIFIED) (que pueden ser más que las que guardó recién) ejecuta los siguientes pasos *en ese orden*:
 .. Llama al método `confirmReception` con el TransactionId de la transacción como parámetro, con lo que el IncomingCrypto marcará la transacción que se indique como (DELIVIRED,RECEPTION_NOTIFIED) en la base de datos del IncomingCrypto.
-.. Marca la transacción como (RESPONSIBLE,NO_ACTION_REQUIRED)
-. El segundo agente ve las transacciones que tiene y decide si debe ejecutarlas o no, *luego de ejecutar la transacción* la marca como (APPLIED,NO_ACTION_REQUIRED)
+.. Marca la transacción como (RESPONSIBLE,NO_ACTION_REQUIRED).
+. El RelayAgente (segundo agente) del IncomingCryptoExtraUser ve las transacciones que tiene y decide si debe ejecutarlas o no, *luego de ejecutar la transacción* la marca como (APPLIED,NO_ACTION_REQUIRED)
 
 == Consideraciones
 
@@ -139,3 +141,42 @@ NOTE: Acá hay que analizar de nuevo la posibilidad de cancelar el envió de tra
 * Creo que los Network Services que transporten información de valor que deba sincronizarse usarían este protocolo con eventos especializados que indiquen nuevas meta-transacciones.
 * Aún hay que revisar esto y completar los pasos con el incoming-crypto-extra-user y ver si incorporar el incoming-crpyo-intra-user no rompe nada
 * Falta analizar el impacto del cambio de usar una transacción crypto por cada meta transacción a pasar a usar una UTXO por cada meta transacción. 
+
+[[Transaction-Transference-Protocol-v2-ImplementationNotes]]
+== Notas de implementación (IncomingCrypto)
+
+* Por cuestiones de solventar problemas de concurrencia, optamos por usar métodos sincronizados (usamos el modificador synchronized) en la interfaz `TransactionSender`. Además notemos que podemos parametrizar las Transacciones para que transporten otro tipo de datos fuera de transacciones crypto, esto será de utilidad para reutilizar el código. La interfaz será entonces:
+
+  public interface TransactionSender<E> {
+    public synchronized void confirmReception(UUID transactionId)
+    public synchronized List<Transaction<E>> getPendingTransactions(Specialist specialist)
+  }
+
+* El Incoming crypto usará una clase (Registry) que compartirán los dos agentes de cada módulo. Manejará los siguientes métodos (*notar el modificador synchronized*):
+
+NOTE: EventWrapper es un contenedor de datos de información de eventos. Probablemente no hace falta.
+
+  //To manage events
+  synchronized void saveNewEvent(String eventType, String eventSource) throws CantSaveEvent;
+  synchronized EventWrapper getNextPendingEvent() throws CantReadEvent;
+  synchronized void discardEvent(UUID eventId) throws CantReadEvent, CantSaveEvent;
+  
+  //To manage transactions
+  
+  //Monitor Agent
+  // Las coloca en (A,TBN)
+  synchronized void acknowledgeTransactions(List<Transaction<CryptoTransaction>> transactionList) CantAcknowledgeTransactionException;
+  // Retorna las que están en (A,TBN)
+  synchronized List<Transaction<CryptoTransaction>> getAcknowledgedTransactions() CantGetTransactionsException;
+  // Pasa una de (R,NAR) 
+  synchronized void acquireResponsibility(Transaction<CryptoTransaction> transaction) CantAcquireResponsibility;
+  
+  //Relay Agent
+  // Retorna las (R,NAR)
+  synchronized List<Transaction<CryptoTransaction>> getResponsibleTransactions() CantAccessTransactionsException;
+  // Pasa la transacción a TBN y le agrega el Specialist.
+  synchronized void setToNotify(UUID id, Specialist specialist)
+  // La lista de (R,TBN) o (R,SN)
+  synchronized List<Transaction<CryptoTransaction>> getResponsibleTransactionsPendingAction() CantAccessTransactionsException;
+  // Pasa las que son TBN a SN
+  synchronized void setSendingNotified() CantSaveTransactionsException;
