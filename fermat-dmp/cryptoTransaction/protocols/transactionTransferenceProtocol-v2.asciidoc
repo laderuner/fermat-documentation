@@ -7,7 +7,7 @@ Author: Ezequiel Postan <ezequiel_postan@hotmail.com>
 
 * No se puede depender sólo de los eventos informativos IncomingCryptoReceivedEvent e IncomingCryptoReversedEvent porque pueden detectarse transacciones crypto confirmadas sin que haya visto la primer confirmación (porque estaba apagado el equipo por ejemplo). El protocolo de traspaso de transacciones sólo depende de un evento que exige el traspaso de transacciones pendientes, usaresmo el evento IncomingCryptoTransactionsWaitingTransferenceEvent.
 
-== Problemas de la versión 1
+== Probelmas de la versión 1
 
 * No separaba los conceptos de transacción de la red crypto y transacción de la plataforma. Cosa que notaremos más adelante.
 * No plantea cómo organizar las cosas para reutilizar el protocolo para comunicar MetaTransactionInformation provenientes de los network services.
@@ -145,25 +145,34 @@ NOTE: Acá hay que analizar de nuevo la posibilidad de cancelar el envió de tra
 [[Transaction-Transference-Protocol-v2-ImplementationNotes]]
 == Notas de implementación (IncomingCrypto)
 
-* Por cuestiones de solventar problemas de concurrencia, optamos por usar métodos sincronizados (usamos el modificador synchronized) en la interfaz `TransactionSender`. Además notemos que podemos parametrizar las Transacciones para que transporten otro tipo de datos fuera de transacciones crypto, esto será de utilidad para reutilizar el código. La interfaz será entonces:
+* El incoming crypto usará una clase (Registry) que compartirán los dos agentes de cada módulo. Por cada módulo el registry abritá una copia de la tabla que guarda las transacciones. Esto se hace para evitar problemas de concurrencia.
+* También para solventar problemas de concurrencia, optamos por modificar la interfaz del pluginRoot. En lugar de implementar la interfaz `TransactionSender` definiremos una interfaz `IncomingCryptoManager` con el método `TransactionSender getTransactionSender(Specialist specialist)`. +
+La implementación de esta interfaz hará que retornemos una copia de la tabla de transacciones actual que lleva el manejador de la base de datos (haremos un open de la tabla para pasar una instancia de la abstracción distinta, lo cual resuelve varias cuestiones de concurrencia).
+Además, notemos que podemos parametrizar las Transactions para que transporten otro tipo de datos fuera de transacciones crypto, esto será de utilidad para reutilizar el código. Por último un nombre más adecuado para la interfaz TransactionSender sería TransactionManager, las interfaces finales serán entonces:
 
-  public interface TransactionSender<E> {
-    public synchronized void confirmReception(UUID transactionId)
-    public synchronized List<Transaction<E>> getPendingTransactions(Specialist specialist)
+  public interface IncomingCryptoManager {
+    TransactionManager<CryptoTransaction> getTransactionSender(Specialist specialist)
   }
 
-* El Incoming crypto usará una clase (Registry) que compartirán los dos agentes de cada módulo. Manejará los siguientes métodos (*notar el modificador synchronized*):
+  public interface TransactionManager<E> {
+    public void confirmReception(UUID transactionId)
+    public List<Transaction<E>> getPendingTransactions(Specialist specialist)
+  }
+
+* Será el mismo Registry quien implementará la interfaz `TransactionManager<CryptoTransaction>`.
+* Además el Registry tendrá los siguientes métodos para los agentes:
 
 NOTE: EventWrapper es un contenedor de datos de información de eventos. Probablemente no hace falta.
 
-  //To manage events
+  // To manage events
+  // Used by the Monitor Agent
   synchronized void saveNewEvent(String eventType, String eventSource) throws CantSaveEvent;
   synchronized EventWrapper getNextPendingEvent() throws CantReadEvent;
   synchronized void discardEvent(UUID eventId) throws CantReadEvent, CantSaveEvent;
   
   //To manage transactions
   
-  //Monitor Agent
+  // User by the Monitor Agent
   // Las coloca en (A,TBN)
   synchronized void acknowledgeTransactions(List<Transaction<CryptoTransaction>> transactionList) CantAcknowledgeTransactionException;
   // Retorna las que están en (A,TBN)
@@ -171,24 +180,20 @@ NOTE: EventWrapper es un contenedor de datos de información de eventos. Probabl
   // Pasa una de (R,NAR) 
   synchronized void acquireResponsibility(Transaction<CryptoTransaction> transaction) CantAcquireResponsibility;
   
-  //Relay Agent
+  // Used by Relay Agent
   // Retorna las (R,NAR)
-  synchronized List<Transaction<CryptoTransaction>> getResponsibleTransactions() CantAccessTransactionsException;
+  List<Transaction<CryptoTransaction>> getResponsibleTransactions() CantAccessTransactionsException;
   // Pasa la transacción a TBN y le agrega el Specialist.
-  synchronized void setToNotify(UUID id, Specialist specialist)
+  void setToNotify(UUID id, Specialist specialist)
   // La lista de (R,TBN) o (R,SN)
-  synchronized List<Transaction<CryptoTransaction>> getResponsibleTransactionsPendingAction() CantAccessTransactionsException;
+  List<Transaction<CryptoTransaction>> getResponsibleTransactionsPendingAction() CantAccessTransactionsException;
   // Da los Specialist de las que están en TBN y SN
-  synchronized List<Specialist> getSpecialists() CantReadSpecialistsException;
+  List<Specialist> getSpecialists() CantReadSpecialistsException;
   // Pasa las que son TBN a SN
-  synchronized void setSendingNotified() CantSaveTransactionsException;
+  void setSendingNotified() CantSaveTransactionsException;
 
-El registry mismo implementará la interfaz TransactionSender<CryptoTransaction>
 
 == Analizar
 
-¿Se pueden fusionar el Monitor y el RelayAgent en un sólo thread?
-
-LUIS: Yo prefiero que no. Dejaría una tarea a cada quien y se verían mas simples ambos. Pero en teoría, poder se puede.
-
-
+* ¿Se pueden fusionar el Monitor y el RelayAgent en un sólo thread?
+* Analizar si pude quitarse el parámetro Specialist.
