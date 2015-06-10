@@ -7,7 +7,7 @@ Author: Ezequiel Postan <ezequiel_postan@hotmail.com>
 
 * No se puede depender sólo de los eventos informativos IncomingCryptoReceivedEvent e IncomingCryptoReversedEvent porque pueden detectarse transacciones crypto confirmadas sin que haya visto la primer confirmación (porque estaba apagado el equipo por ejemplo). El protocolo de traspaso de transacciones sólo depende de un evento que exige el traspaso de transacciones pendientes, usaresmo el evento IncomingCryptoTransactionsWaitingTransferenceEvent.
 
-== Probelmas de la versión 1
+== Problemas de la versión 1
 
 * No separaba los conceptos de transacción de la red crypto y transacción de la plataforma. Cosa que notaremos más adelante.
 * No plantea cómo organizar las cosas para reutilizar el protocolo para comunicar MetaTransactionInformation provenientes de los network services.
@@ -188,3 +188,7 @@ El registry mismo implementará la interfaz TransactionSender<CryptoTransaction>
 == Analizar
 
 ¿Se pueden fusionar el Monitor y el RelayAgent en un sólo thread?
+
+LUIS: Yo prefiero que no. Dejaría una tarea a cada quien y se verían mas simples ambos. Pero en teoría, poder se puede.
+
+
