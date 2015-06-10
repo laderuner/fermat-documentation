@@ -178,5 +178,13 @@ NOTE: EventWrapper es un contenedor de datos de información de eventos. Probabl
   synchronized void setToNotify(UUID id, Specialist specialist)
   // La lista de (R,TBN) o (R,SN)
   synchronized List<Transaction<CryptoTransaction>> getResponsibleTransactionsPendingAction() CantAccessTransactionsException;
+  // Da los Specialist de las que están en TBN y SN
+  synchronized List<Specialist> getSpecialists() CantReadSpecialistsException;
   // Pasa las que son TBN a SN
   synchronized void setSendingNotified() CantSaveTransactionsException;
+
+El registry mismo implementará la interfaz TransactionSender<CryptoTransaction>
+
+== Analizar
+
+¿Se pueden fusionar el Monitor y el RelayAgent en un sólo thread?
