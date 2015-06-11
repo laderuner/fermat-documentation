@@ -145,6 +145,10 @@ NOTE: Acá hay que analizar de nuevo la posibilidad de cancelar el envió de tra
 [[Transaction-Transference-Protocol-v2-ImplementationNotes]]
 == Notas de implementación (IncomingCrypto)
 
+Probablemente sea mejor leer primero <<Transaction-Transference-Protocol-v2-NotaParaLuis,esta nota>>
+
+=== Opción 1: Propuesta por Luis
+
 * El incoming crypto usará una clase (Registry) que compartirán los dos agentes de cada módulo. Por cada módulo el registry abritá una copia de la tabla que guarda las transacciones. Esto se hace para evitar problemas de concurrencia.
 * También para solventar problemas de concurrencia, optamos por modificar la interfaz del pluginRoot. En lugar de implementar la interfaz `TransactionSender` definiremos una interfaz `IncomingCryptoManager` con el método `TransactionSender getTransactionSender(Specialist specialist)`. +
 La implementación de esta interfaz hará que retornemos una copia de la tabla de transacciones actual que lleva el manejador de la base de datos (haremos un open de la tabla para pasar una instancia de la abstracción distinta, lo cual resuelve varias cuestiones de concurrencia).
@@ -192,6 +196,15 @@ NOTE: EventWrapper es un contenedor de datos de información de eventos. Probabl
   // Pasa las que son TBN a SN
   void setSendingNotified() CantSaveTransactionsException;
 
+=== Opció 2: Contrapropuesta de Ezequiel
+
+* Tras analizar el tema de concurrencia llegué a la conclusión de que puedo evitar pasar el Registry a otros módulos y además puedo resolver los temas de concurrencia que hablamos hoy.
+* La solución a los temas de concurrencia la hago abriendo la tabla que requiere usar cada método del registry como primer sentencia del método (cosa que igual tengo que hacer en la otra implementación). Esto da un objeto Database propio a cada thread dado que las variables serán locales y esas son exclusivas por thread, por lo que la concurrencia pasa a ser solucionada por el motor de base de datos según la conclusión que tuvimos hoy (ayer).
+* A mí esta solución me parece más simple, sería el pluginRoot el que implementa la interfaz TransactionSender como pensaba inicialmente.
+
+Lo que implementé fue el Registry así que dejo a su elección la implementación que considere mejor (si agregar lo del transaction manager o dejar simplemente la intefaz transaction sender). Como dije, yo prefiero la segunda opción.
+
+IMPORTANT: En ambos casos hay que tratar lo que escribí <<Transaction-Transference-Protocol-v2-NotaParaLuis,abajo>>
 
 == Analizar
 
@@ -199,6 +212,7 @@ NOTE: EventWrapper es un contenedor de datos de información de eventos. Probabl
 ** Preferimos no hacerlo al menos para esta versión. En teoría podría hacerse.
 * Analizar si pude quitarse el parámetro Specialist.
 
+[[Transaction-Transference-Protocol-v2-NotaParaLuis]]
 == Nota para Luis
 
 Tuve que mirar el código de la parte de base de datos. No sé si alguien más aparte de mí está trabajando con cosas multithread pero dejo un par de aclaraciones de lo que veo.
