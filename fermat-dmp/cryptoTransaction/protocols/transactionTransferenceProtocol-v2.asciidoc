@@ -305,3 +305,5 @@ Luego vi que pasa algo similar con el método
 ```
 
 Aquí la variable `databaseTransaction` se usa en otra parte, pero parece ser innecesaria también. Esa preferiría que también la revisen. Aunque en este caso no sé si sería probelmático (no revisé el código de las transacciones).
+
+Por último intenté analizar el método `executeTransaction` de la clase AndroidDatabase, excede mis conocimientos saber si hay problemas allí. Se referencia a una variable que es miembro de la clase (es decir, una que no es variable local del método y por ende podría ser compartida por varios threads al invocarlo), pero esa variable es una referencia a una instancia de la clase SQLiteDatabase, la cual como menciono, no conozco.
