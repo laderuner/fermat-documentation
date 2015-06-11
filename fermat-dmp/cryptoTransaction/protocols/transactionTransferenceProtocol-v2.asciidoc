@@ -247,8 +247,8 @@ El código del método getTable de la clase Database está link:https://github.c
     }
 ```
 
-La variable databaseTable es un miembro de la clase, por lo que sería compartidas por distintos threads threads. +
-Eso a mi entender trae problemas porque si dos threads llaman a métodos que requieren tablas distintas de la base de datos tendría trazas que hacen que el pedido de un thread pise al del otro. +
+La variable databaseTable es un miembro de la clase, por lo que sería compartidas por distintos threads. +
+Eso a mi entender trae problemas porque si dos threads llaman a métodos que requieren tablas distintas de la misma base de datos tendría trazas que hacen que el pedido de un thread pise al del otro (debido a esa asignación previa al return). +
 Esto haría que necesite no sólo obtener la tabla dentro de un método compartido por varios threads sino que también hace que tenga que abrir la base de datos en el inicio de cada llamada a un método de ese estilo. +
 Afortunadamente el método `openDatabase(UUID ownerId, String databaseName)` del DatabaseSystem no usa miembros de clase y sólo usa variables locales por lo que parece ser thread safe (por lo que el problema no escalaría otro nivel más). El código es link:https://github.com/bitDubai/fermat-pip-android-addon-os-android-database-system-bitdubai/blob/master/src/main/java/com/bitdubai/android_fermat_pip_addon_layer_2_os_file_system/version_1/structure/AndroidPluginDatabaseSystem.java#L28[este]:
 
@@ -293,3 +293,15 @@ se arregla la necesidad de que tenga que abrir la base de datos en cada método.
 Yo implementé los métodos abriendo la tabla para generar una copia exclusiva para cada thread, pero si mi razonamiento es correcto hay que corregir el código de la base de datos que menciono. +
 
 Si mi razonamiento es erroneo, me disculpo por el tiempo que pueda haber llevado leer mi análisis.  
+
+Luego vi que pasa algo similar con el método
+
+```
+    @Override
+    public DatabaseTransaction newTransaction(){
+
+        return databaseTransaction = new AndroidDatabaseTransaction();
+    }
+```
+
+Aquí la variable `databaseTransaction` se usa en otra parte, pero parece ser innecesaria también. Esa preferiría que también la revisen. Aunque en este caso no sé si sería probelmático (no revisé el código de las transacciones).
