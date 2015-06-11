@@ -217,6 +217,7 @@ La versión corta es que hay que cambiar un par de lineas de un archivo del plug
 Eso puede dar la impresión de resolver el tema, pero si uno presta atención se usa una variable de la clase para acceder a una nueva tabla (la variable referenciada como `this.database`) +
 El código del método getTable de la clase Database está link:https://github.com/bitDubai/fermat-pip-android-addon-os-android-database-system-bitdubai/blob/master/src/main/java/com/bitdubai/android_fermat_pip_addon_layer_2_os_file_system/version_1/structure/AndroidDatabase.java#L116[aquí], como vemos:
 
+```
     /**
      * <p>Return a DatabaseTable definition
      *
@@ -230,12 +231,14 @@ El código del método getTable de la clase Database está link:https://github.c
 
         return databaseTable;
     }
+```
 
 La variable databaseTable es un miembro de la clase, por lo que sería compartidas por distintos threads threads. +
 Eso a mi entender trae problemas porque si dos threads llaman a métodos que requieren tablas distintas de la base de datos tendría trazas que hacen que el pedido de un thread pise al del otro. +
 Esto haría que necesite no sólo obtener la tabla dentro de un método compartido por varios threads sino que también hace que tenga que abrir la base de datos en el inicio de cada llamada a un método de ese estilo. +
 Afortunadamente el método `openDatabase(UUID ownerId, String databaseName)` del DatabaseSystem no usa miembros de clase y sólo usa variables locales por lo que parece ser thread safe (por lo que el problema no escalaría otro nivel más). El código es link:https://github.com/bitDubai/fermat-pip-android-addon-os-android-database-system-bitdubai/blob/master/src/main/java/com/bitdubai/android_fermat_pip_addon_layer_2_os_file_system/version_1/structure/AndroidPluginDatabaseSystem.java#L28[este]:
 
+```
     @Override
     public Database openDatabase(UUID ownerId, String databaseName) throws CantOpenDatabaseException, DatabaseNotFoundException {
         try{
@@ -252,15 +255,18 @@ Afortunadamente el método `openDatabase(UUID ownerId, String databaseName)` del
         }
 
     }
+```    
 
 Más allá de eso, analicé el código problemático del AndroidDatabase (la clase que implementa la interfaz Database para Android) y en mi opinión cambiando el código de la implementación de la base de datos que dice:
 
+```
     public DatabaseTable getTable(String tableName){
 
         databaseTable = new AndroidDatabaseTable(this.context,this.Database, tableName);
 
         return databaseTable;
     }
+```
 
 por simplemente
 
