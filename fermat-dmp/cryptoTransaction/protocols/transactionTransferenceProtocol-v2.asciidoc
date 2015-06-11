@@ -199,3 +199,77 @@ NOTE: EventWrapper es un contenedor de datos de información de eventos. Probabl
 ** Preferimos no hacerlo al menos para esta versión. En teoría podría hacerse.
 * Analizar si pude quitarse el parámetro Specialist.
 
+== Nota para Luis
+
+Tuve que mirar el código de la parte de base de datos. No sé si alguien más aparte de mí está trabajando con cosas multithread pero dejo un par de aclaraciones de lo que veo.
+La versión corta es que hay que cambiar un par de lineas de un archivo del plugin de base de datos, la explicación del por qué la dejo acá abajo.
+
+. Si bien a nivel de SQL las cosas pueden tener locks y demás mecanismos de concurrencia, lo que manejamos desde otros plug-ins es una abstracción, por ende si alguna variable de clase (member) es usada por los métodos que implementan estas abstracciones entonces serán compartidas por los threads que usen un mismo objeto. +
+. Si un método que es llamado por varios threads accede a una tabla (un objeto DatabaseTable), uno puede crear una instancia de DatabaseTable nueva en cada llamada del método para que estos no compartan variables de las abstracciones (acá la abstracción es el objeto DatabaseTable). Es decir hacer algo así:
+
+  public void metodoCompartido(){
+     DatabaseTable t = this.database.getTable(Nombre_de_la_tabla);
+     ...
+     Manipulan la tabla
+     ...
+  }
+
+Eso puede dar la impresión de resolver el tema, pero si uno presta atención se usa una variable de la clase para acceder a una nueva tabla (la variable referenciada como `this.database`) +
+El código del método getTable de la clase Database está link:https://github.com/bitDubai/fermat-pip-android-addon-os-android-database-system-bitdubai/blob/master/src/main/java/com/bitdubai/android_fermat_pip_addon_layer_2_os_file_system/version_1/structure/AndroidDatabase.java#L116[aquí], como vemos:
+
+    /**
+     * <p>Return a DatabaseTable definition
+     *
+     * @param tableName name database table using
+     * @return DatabaseTable Object
+     */
+    @Override
+    public DatabaseTable getTable(String tableName){
+
+        databaseTable = new AndroidDatabaseTable(this.context,this.Database, tableName);
+
+        return databaseTable;
+    }
+
+La variable databaseTable es un miembro de la clase, por lo que sería compartidas por distintos threads threads. +
+Eso a mi entender trae problemas porque si dos threads llaman a métodos que requieren tablas distintas de la base de datos tendría trazas que hacen que el pedido de un thread pise al del otro. +
+Esto haría que necesite no sólo obtener la tabla dentro de un método compartido por varios threads sino que también hace que tenga que abrir la base de datos en el inicio de cada llamada a un método de ese estilo. +
+Afortunadamente el método `openDatabase(UUID ownerId, String databaseName)` del DatabaseSystem no usa miembros de clase y sólo usa variables locales por lo que parece ser thread safe (por lo que el problema no escalaría otro nivel más). El código es link:https://github.com/bitDubai/fermat-pip-android-addon-os-android-database-system-bitdubai/blob/master/src/main/java/com/bitdubai/android_fermat_pip_addon_layer_2_os_file_system/version_1/structure/AndroidPluginDatabaseSystem.java#L28[este]:
+
+    @Override
+    public Database openDatabase(UUID ownerId, String databaseName) throws CantOpenDatabaseException, DatabaseNotFoundException {
+        try{
+            AndroidDatabase database;
+            String hasDBName = hashDataBaseName(databaseName);
+            database = new AndroidDatabase(this.Context, ownerId, hasDBName);
+            database.openDatabase(hasDBName);
+
+            return database;
+        }
+        catch (NoSuchAlgorithmException e)
+        {
+            throw new CantOpenDatabaseException();
+        }
+
+    }
+
+Más allá de eso, analicé el código problemático del AndroidDatabase (la clase que implementa la interfaz Database para Android) y en mi opinión cambiando el código de la implementación de la base de datos que dice:
+
+    public DatabaseTable getTable(String tableName){
+
+        databaseTable = new AndroidDatabaseTable(this.context,this.Database, tableName);
+
+        return databaseTable;
+    }
+
+por simplemente
+
+    public DatabaseTable getTable(String tableName){
+        return new AndroidDatabaseTable(this.context,this.Database, tableName);
+    }
+
+se arregla la necesidad de que tenga que abrir la base de datos en cada método. La variable que se asigna en ese código es variable de clase (miembro), pero no es usada en ningún otro lado. Igual pediría que lo revise alguien que entiende mejor el plug-in (yo sólo navegué un par de clases). +
+
+Yo implementé los métodos abriendo la tabla para generar una copia exclusiva para cada thread, pero si mi razonamiento es correcto hay que corregir el código de la base de datos que menciono. +
+
+Si mi razonamiento es erroneo, me disculpo por el tiempo que pueda haber llevado leer mi análisis.  
